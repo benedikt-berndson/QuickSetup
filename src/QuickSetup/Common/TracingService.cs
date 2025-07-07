@@ -5,12 +5,13 @@ using QuickSetup.Common.Abstractions;
 
 namespace QuickSetup.Common;
 
-public sealed class TracingService(QuickSetupSettings quickSetupSettings) : ITracingService
+public sealed class TracingService(ISettingsFactory settingsFactory) : ITracingService
 {
   private static readonly StringBuilder Global = new();
 
   public void WriteStartLog(PostgresSetupCommand command)
   {
+    var s = settingsFactory.GetInstance();
     var sb = new StringBuilder();
     sb.AppendLine("# DATABASE SETUP COMMAND EXECUTION AUDIT LOG");
     sb.AppendLine("## USED SETTINGS");
@@ -21,15 +22,15 @@ public sealed class TracingService(QuickSetupSettings quickSetupSettings) : ITra
     table.AddRow(nameof(command.DropDatabases), command.DropDatabases);
     table.AddRow(nameof(command.DropSchemas), command.DropSchemas);
     table.AddRow(nameof(command.DropUsers), command.DropUsers);
-    foreach (var pair in quickSetupSettings.DatabaseSchemaDefinitions)
+    foreach (var pair in s.DatabaseSchemaDefinitions)
     {
       table.AddRow($"Database: {pair.Key}", string.Join(", ", pair.Value));
     }
 
-    table.AddRow(nameof(quickSetupSettings.MachineUserNameMiddlePart), quickSetupSettings.MachineUserNameMiddlePart);
-    table.AddRow(nameof(quickSetupSettings.AppUserNameMiddlePart), quickSetupSettings.AppUserNameMiddlePart);
-    table.AddRow(nameof(quickSetupSettings.ReadonlyUserNameMiddlePart), quickSetupSettings.ReadonlyUserNameMiddlePart);
-    table.AddRow(nameof(quickSetupSettings.MarkdownOutputFilePath), GetMarkdownLogOutputPath());
+    table.AddRow(nameof(s.MachineUserNameMiddlePart), s.MachineUserNameMiddlePart);
+    table.AddRow(nameof(s.AppUserNameMiddlePart), s.AppUserNameMiddlePart);
+    table.AddRow(nameof(s.ReadonlyUserNameMiddlePart), s.ReadonlyUserNameMiddlePart);
+    table.AddRow(nameof(s.MarkdownOutputFilePath), GetMarkdownLogOutputPath());
     table.MaxWidth = 300;
     sb.Append(table.ToMarkDownString());
     sb.AppendLine();
@@ -67,7 +68,10 @@ public sealed class TracingService(QuickSetupSettings quickSetupSettings) : ITra
   }
 
   private string GetMarkdownLogOutputPath()
-    => string.IsNullOrEmpty(quickSetupSettings.MarkdownOutputFilePath)
-      ? "postgres_setup.md"
-      : quickSetupSettings.MarkdownOutputFilePath;
+  {
+    var s = settingsFactory.GetInstance();
+    return string.IsNullOrEmpty(s.MarkdownOutputFilePath)
+      ? "setup_log.md"
+      : s.MarkdownOutputFilePath;
+  }
 }

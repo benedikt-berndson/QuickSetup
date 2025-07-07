@@ -2,8 +2,6 @@
 using Dapper;
 using DotMake.CommandLine;
 using InterpolatedSql.Dapper;
-using Microsoft.Extensions.DependencyInjection;
-using Npgsql;
 using QuickSetup.Common;
 using QuickSetup.Common.Abstractions;
 using QuickSetup.Models;
@@ -12,23 +10,23 @@ namespace QuickSetup.Commands.Postgres;
 
 [CliCommand(Description = "Setup new databases, users, schemas and default privileges", Parent = typeof(RootCommand),
   Alias = "pg-setup")]
-public class PostgresSetupCommand
+public class PostgresSetupCommand : AbstractSettingsRequiringCommand, ICliRunAsyncWithContext
 {
-  private readonly IServiceProvider _serviceProvider;
-  private readonly QuickSetupSettings _quickSetupSettings;
   private readonly ITracingService _tracingService;
+  private readonly IDbConnectionFactory _dbConnectionFactory;
 
-  public PostgresSetupCommand(IServiceProvider serviceProvider, QuickSetupSettings quickSetupSettings,
-    ITracingService tracingService)
+  public PostgresSetupCommand(ISettingsFactory settingsFactoryInstance,
+    ITracingService tracingService, IDbConnectionFactory dbConnectionFactory) : base(settingsFactoryInstance)
   {
     _tracingService = tracingService;
-    _serviceProvider = serviceProvider;
-    _quickSetupSettings = quickSetupSettings;
+    _dbConnectionFactory = dbConnectionFactory;
   }
 
   [CliArgument(Description = "Define which connection string from settings.toml to use")]
   public string ConnectionStringName { get; set; } = null!;
 
+  // [CliOption(Description = "Path to settings file, defaults to current directory", Alias = "sfx")]
+  // public string Bla { get; set; } = "settings.toml";
 
   [CliOption(Description = "Drop existing databases")]
   public bool DropDatabases { get; set; }
@@ -40,11 +38,12 @@ public class PostgresSetupCommand
   public bool DropUsers { get; set; }
 
 
-  public async Task RunAsync()
+  public async Task RunAsync(CliContext cliContext)
   {
+    SettingsFactoryInstance.Init(SettingsFile);
     _tracingService.WriteStartLog(this);
     var contexts = GetContexts();
-    await using var adminConnection = _serviceProvider.GetRequiredKeyedService<NpgsqlConnection>(ConnectionStringName);
+    await using var adminConnection = _dbConnectionFactory.GetPostgresConnection(ConnectionStringName);
 
     HandleDatabaseObjectRemovalAsync(adminConnection, contexts);
   }
@@ -99,22 +98,27 @@ public class PostgresSetupCommand
 
 
   private List<SetupContext> GetContexts()
-    => _quickSetupSettings.DatabaseSchemaDefinitions
+  {
+    var settings = SettingsFactoryInstance.GetInstance();
+    var result = settings.DatabaseSchemaDefinitions
       .Select(databaseSchemaPair =>
       {
         var databaseName = databaseSchemaPair.Key;
         var contexts = databaseSchemaPair.Value
           .Select(schemaName => new SetupContext(databaseName,
             schemaName,
-            new DbUser($"{schemaName}{_quickSetupSettings.MachineUserNameMiddlePart}{databaseName}",
+            new DbUser($"{schemaName}{settings.MachineUserNameMiddlePart}{databaseName}",
               PasswordFactory.GetNew()),
-            new DbUser($"{schemaName}{_quickSetupSettings.AppUserNameMiddlePart}{databaseName}",
+            new DbUser($"{schemaName}{settings.AppUserNameMiddlePart}{databaseName}",
               PasswordFactory.GetNew()),
-            new DbUser($"{schemaName}{_quickSetupSettings.ReadonlyUserNameMiddlePart}{databaseName}",
+            new DbUser($"{schemaName}{settings.ReadonlyUserNameMiddlePart}{databaseName}",
               PasswordFactory.GetNew())));
 
         return contexts;
       })
       .SelectMany(x => x)
       .ToList();
+
+    return result;
+  }
 }
