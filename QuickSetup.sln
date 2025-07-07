@@ -1,0 +1,27 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{E2E0F0B5-93E7-4EC6-B824-7CB41FC9A404}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "QuickSetup", "src\QuickSetup\QuickSetup.csproj", "{560F840A-6061-4065-8CD0-3CB58BF56559}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{560F840A-6061-4065-8CD0-3CB58BF56559}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{560F840A-6061-4065-8CD0-3CB58BF56559}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{560F840A-6061-4065-8CD0-3CB58BF56559}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{560F840A-6061-4065-8CD0-3CB58BF56559}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{560F840A-6061-4065-8CD0-3CB58BF56559} = {E2E0F0B5-93E7-4EC6-B824-7CB41FC9A404}
+	EndGlobalSection
+EndGlobal
