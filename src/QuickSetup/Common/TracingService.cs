@@ -27,10 +27,21 @@ public sealed class TracingService(ISettingsFactory settingsFactory) : ITracingS
       table.AddRow($"Database: {pair.Key}", string.Join(", ", pair.Value));
     }
 
-    table.AddRow(nameof(s.MachineUserNameMiddlePart), s.MachineUserNameMiddlePart);
-    table.AddRow(nameof(s.AppUserNameMiddlePart), s.AppUserNameMiddlePart);
-    table.AddRow(nameof(s.ReadonlyUserNameMiddlePart), s.ReadonlyUserNameMiddlePart);
-    table.AddRow(nameof(s.MarkdownOutputFilePath), GetMarkdownLogOutputPath());
+    table.AddRow(nameof(s.OwningUserTemplate),
+      $"Name={s.OwningUserTemplate.Name}, Password={s.OwningUserTemplate.Password}");
+    foreach (var u in s.ReadWriteUserTemplates)
+    {
+      table.AddRow(nameof(s.ReadWriteUserTemplates),
+        $"Name={s.OwningUserTemplate.Name}, Password={s.OwningUserTemplate.Password}");
+    }
+
+    foreach (var u in s.ReadonlyUserTemplates)
+    {
+      table.AddRow(nameof(s.ReadWriteUserTemplates),
+        $"Name={s.OwningUserTemplate.Name}, Password={s.OwningUserTemplate.Password}");
+    }
+
+    table.AddRow(nameof(s.MarkdownOutput), GetMarkdownLogOutputPath());
     table.MaxWidth = 300;
     sb.Append(table.ToMarkDownString());
     sb.AppendLine();
@@ -70,8 +81,8 @@ public sealed class TracingService(ISettingsFactory settingsFactory) : ITracingS
   private string GetMarkdownLogOutputPath()
   {
     var s = settingsFactory.GetInstance();
-    return string.IsNullOrEmpty(s.MarkdownOutputFilePath)
+    return string.IsNullOrEmpty(s.MarkdownOutput)
       ? "setup_log.md"
-      : s.MarkdownOutputFilePath;
+      : s.MarkdownOutput;
   }
 }

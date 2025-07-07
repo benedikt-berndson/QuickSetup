@@ -1,7 +1,7 @@
 ﻿using System.Data.Common;
+using System.Text;
 using Dapper;
 using DotMake.CommandLine;
-using InterpolatedSql.Dapper;
 using QuickSetup.Common;
 using QuickSetup.Common.Abstractions;
 using QuickSetup.Models;
@@ -25,16 +25,13 @@ public class PostgresSetupCommand : AbstractSettingsRequiringCommand, ICliRunAsy
   [CliArgument(Description = "Define which connection string from settings.toml to use")]
   public string ConnectionStringName { get; set; } = null!;
 
-  // [CliOption(Description = "Path to settings file, defaults to current directory", Alias = "sfx")]
-  // public string Bla { get; set; } = "settings.toml";
-
   [CliOption(Description = "Drop existing databases")]
   public bool DropDatabases { get; set; }
 
   [CliOption(Description = "Drop existing schemas")]
   public bool DropSchemas { get; set; }
 
-  [CliOption(Description = "Drop existing schemas")]
+  [CliOption(Description = "Drop existing users")]
   public bool DropUsers { get; set; }
 
 
@@ -46,6 +43,7 @@ public class PostgresSetupCommand : AbstractSettingsRequiringCommand, ICliRunAsy
     await using var adminConnection = _dbConnectionFactory.GetPostgresConnection(ConnectionStringName);
 
     HandleDatabaseObjectRemovalAsync(adminConnection, contexts);
+    HandleUserCreation(adminConnection, contexts);
   }
 
   private void HandleDatabaseObjectRemovalAsync(DbConnection connection, List<SetupContext> contexts)
@@ -57,43 +55,50 @@ public class PostgresSetupCommand : AbstractSettingsRequiringCommand, ICliRunAsy
 
     var existingDatabases = connection.Query<string>("SELECT datname FROM pg_database").ToHashSet();
 
-    foreach (var sql in from ctx in contexts
-                        where DropSchemas && existingDatabases.Contains(ctx.Database)
-                        select $"DROP SCHEMA IF EXISTS {ctx.Database}.{ctx.Schema} CASCADE")
+    var queries = new StringBuilder();
+    if (DropSchemas)
     {
-      _tracingService.WriteLine($"{sql}");
-      connection.Execute(sql);
+      var dropSchemaStatements = contexts
+        .Where(x => existingDatabases.Contains(x.Database))
+        .Select(x => $"DROP SCHEMA IF EXISTS {x.Database}.{x.Schema} CASCADE;");
+      queries.AppendLine(string.Join("\n", dropSchemaStatements));
     }
 
-    foreach (var cmd in from ctx in contexts
-                        where DropDatabases
-                        select connection.SqlBuilder($"DROP DATABASE IF EXISTS {ctx.Database}").Build())
+    if (DropDatabases)
     {
-      _tracingService.WriteLine($"{cmd.Sql} | {string.Join(", ", cmd.SqlParameters.ToString())}");
-      cmd.Execute();
+      var dropDatabaseStatements = contexts.DistinctBy(x => x.Database)
+        .Select(x => $"DROP DATABASE IF EXISTS {x.Database};");
+      queries.AppendLine(string.Join("\n", dropDatabaseStatements));
     }
 
-    foreach (var ctx in contexts.Where(ctx => DropUsers))
+    if (DropUsers)
     {
-      connection.SqlBuilder($"DROP USER IF EXISTS {ctx.MachineUser.Name}").Execute();
-      connection.SqlBuilder($"DROP USER IF EXISTS {ctx.AppUser.Name}").Execute();
-      connection.SqlBuilder($"DROP USER IF EXISTS {ctx.ReadonlyUser.Name}").Execute();
+      var dropUserStatements = contexts.Select(x => x.GetUsers())
+        .SelectMany(x => x)
+        .Select(GetDropUserStatement);
+      queries.AppendLine(string.Join("\n", dropUserStatements));
     }
 
+    var stmts = queries.ToString();
+    _tracingService.WriteLine(stmts);
+    connection.Execute(stmts);
     _tracingService.WriteCodeBlockMarker();
   }
 
   private void HandleUserCreation(DbConnection connection, List<SetupContext> contexts)
   {
-    foreach (var ctx in contexts)
-    {
-      connection.SqlBuilder($"CREATE USER {ctx.MachineUser.Name} WITH ENCRYPTED PASSWORD {ctx.MachineUser.Password}")
-        .Execute();
-      connection.SqlBuilder($"CREATE USER {ctx.MachineUser.Name} WITH ENCRYPTED PASSWORD {ctx.MachineUser.Password}")
-        .Execute();
-      connection.SqlBuilder($"CREATE USER {ctx.MachineUser.Name} WITH ENCRYPTED PASSWORD {ctx.MachineUser.Password}")
-        .Execute();
-    }
+    var queries = new StringBuilder();
+    var createStatements = contexts
+      .Select(x => x.GetUsers())
+      .SelectMany(x => x)
+      .Select(x => $"CREATE USER {x.Name} WITH ENCRYPTED PASSWORD '{x.Password}';");
+    var sql = queries.AppendLine(string.Join("\n", createStatements)).ToString();
+
+    _tracingService.WriteCodeBlockMarker();
+    _tracingService.WriteLine(sql);
+    _tracingService.WriteCodeBlockMarker();
+
+    connection.Execute(sql);
   }
 
 
@@ -105,14 +110,31 @@ public class PostgresSetupCommand : AbstractSettingsRequiringCommand, ICliRunAsy
       {
         var databaseName = databaseSchemaPair.Key;
         var contexts = databaseSchemaPair.Value
-          .Select(schemaName => new SetupContext(databaseName,
-            schemaName,
-            new DbUser($"{schemaName}{settings.MachineUserNameMiddlePart}{databaseName}",
-              PasswordFactory.GetNew()),
-            new DbUser($"{schemaName}{settings.AppUserNameMiddlePart}{databaseName}",
-              PasswordFactory.GetNew()),
-            new DbUser($"{schemaName}{settings.ReadonlyUserNameMiddlePart}{databaseName}",
-              PasswordFactory.GetNew())));
+          .Select(schemaName =>
+          {
+            var owner = User.From(settings.OwningUserTemplate.Name
+                .Replace("{{SCHEMA}}", schemaName, StringComparison.InvariantCultureIgnoreCase).Replace("{{DATABASE}}",
+                  databaseName, StringComparison.InvariantCultureIgnoreCase),
+              settings.OwningUserTemplate.GeneratePassword
+                ? PasswordFactory.GetNew()
+                : settings.OwningUserTemplate.Password);
+
+            var readWriteUsers = settings.ReadWriteUserTemplates
+              .Select(x => User.From(x.Name
+                  .Replace("{{SCHEMA}}", schemaName, StringComparison.InvariantCultureIgnoreCase)
+                  .Replace("{{DATABASE}}", databaseName, StringComparison.InvariantCultureIgnoreCase),
+                x.GeneratePassword ? PasswordFactory.GetNew() : x.Password))
+              .ToList();
+
+            var readOnlyUsers = settings.ReadonlyUserTemplates
+              .Select(x => User.From(x.Name
+                  .Replace("{{SCHEMA}}", schemaName, StringComparison.InvariantCultureIgnoreCase)
+                  .Replace("{{DATABASE}}", databaseName, StringComparison.InvariantCultureIgnoreCase),
+                x.GeneratePassword ? PasswordFactory.GetNew() : x.Password))
+              .ToList();
+
+            return new SetupContext(databaseName, schemaName, owner, readWriteUsers, readOnlyUsers);
+          });
 
         return contexts;
       })
@@ -121,4 +143,7 @@ public class PostgresSetupCommand : AbstractSettingsRequiringCommand, ICliRunAsy
 
     return result;
   }
+
+  private static string GetDropUserStatement(User user)
+    => $"DROP USER IF EXISTS {user.Name};";
 }

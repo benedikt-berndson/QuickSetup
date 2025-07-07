@@ -1,4 +1,5 @@
 ﻿using System.Data.Common;
+using Npgsql;
 
 namespace QuickSetup.Common.Abstractions;
 

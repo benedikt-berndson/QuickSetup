@@ -1,3 +1,20 @@
-﻿namespace QuickSetup.Models;
+﻿using QuickSetup.Common;
 
-public record SetupContext(string Database, string Schema, DbUser MachineUser, DbUser AppUser, DbUser ReadonlyUser);
+namespace QuickSetup.Models;
+
+public record SetupContext(
+  string Database,
+  string Schema,
+  User OwningUser,
+  List<User> ReadWriteUsers,
+  List<User> ReadonlyUsers
+)
+{
+  public List<User> GetUsers()
+  {
+    var users = new List<User> { OwningUser };
+    users.AddRange(ReadWriteUsers);
+    users.AddRange(ReadonlyUsers);
+    return users;
+  }
+};

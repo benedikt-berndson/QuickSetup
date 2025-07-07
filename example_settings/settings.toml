@@ -1,16 +1,19 @@
-﻿markdown_output_file_path = "C:/temp/hive_local_setup.md"
-
-# Machine username middle part which is put in between the domain and the database name. Example domain='hive', default_middle_part='_machine_user_', db='dev01' => hive_machine_user_dev01
-#machine_user_name_middle_part = "_machine_user_"
-
-# Machine username middle part which is put in between the domain and the database name. Example domain='hive', default_middle_part='_machine_user_', db='dev01' => hive_machine_user_dev01
-#app_user_name_middle_part = "_app_user_"
-
-# Machine username middle part which is put in between the domain and the database name. Example domain='hive', default_middle_part='_machine_user_', db='dev01' => hive_machine_user_dev01
-#readonly_user_name_middle_part = "_readonly_user_"
+﻿markdown_output = "setup_log.md"
 
 [connection_strings]
 local = "server=localhost;Port=5432;Database=postgres;User Id=postgres;Password=root4me;Search Path=public;Include Error Detail=true"
 
 [database_schema_definitions]
 dev01 = ["quick_setup", "quick_setup_msg_store"]
+
+[owning_user_template]
+name = "{{SCHEMA}}_machine_user_{{DATABASE}}"
+password = "{{PASSWORD}}"
+
+[[read_write_user_templates]]
+name = "{{SCHEMA}}_app_user_{{DATABASE}}"
+password = "{{PASSWORD}}"
+
+[[readonly_user_templates]]
+name = "{{SCHEMA}}_readonly_user_{{DATABASE}}"
+password = "{{PASSWORD}}"

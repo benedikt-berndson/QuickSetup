@@ -1,4 +1,6 @@
-﻿namespace QuickSetup.Common.Abstractions;
+﻿using QuickSetup.Models;
+
+namespace QuickSetup.Common.Abstractions;
 
 public interface ISettingsFactory
 {

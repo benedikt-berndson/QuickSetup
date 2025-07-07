@@ -1,14 +1,7 @@
-﻿using System.Security.Cryptography;
-
-namespace QuickSetup.Common;
+﻿namespace QuickSetup.Common;
 
 public static class PasswordFactory
 {
   public static string GetNew()
-  {
-    var key = new byte[50];
-    using var rng = RandomNumberGenerator.Create();
-    rng.GetBytes(key);
-    return Convert.ToBase64String(key).ToUpperInvariant();
-  }
+    => $"{Guid.NewGuid().ToString("N").ToUpperInvariant()}_{Guid.NewGuid().ToString("N").ToUpperInvariant()}";
 }
