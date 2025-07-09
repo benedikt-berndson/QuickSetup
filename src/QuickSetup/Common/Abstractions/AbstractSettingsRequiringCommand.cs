@@ -4,14 +4,14 @@ namespace QuickSetup.Common.Abstractions;
 
 public abstract class AbstractSettingsRequiringCommand
 {
-  protected readonly ISettingsFactory SettingsFactoryInstance;
+  protected readonly ISettingsProvider SettingsProvider;
 
   // ReSharper disable once MemberCanBePrivate.Global
   [CliOption(Description = "Path to settings file, defaults to current directory", Alias = "sf")]
-  public string SettingsFile { get; set; } = SettingsFactory.DefaultSettingsFile;
+  public string SettingsFile { get; set; } = Common.SettingsProvider.DefaultSettingsFile;
 
-  protected AbstractSettingsRequiringCommand(ISettingsFactory settingsFactoryInstance)
+  protected AbstractSettingsRequiringCommand(ISettingsProvider settingsProvider)
   {
-    SettingsFactoryInstance = settingsFactoryInstance;
+    SettingsProvider = settingsProvider;
   }
 }

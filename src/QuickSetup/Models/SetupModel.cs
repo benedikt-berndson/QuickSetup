@@ -1,8 +1,6 @@
-﻿using QuickSetup.Common;
+﻿namespace QuickSetup.Models;
 
-namespace QuickSetup.Models;
-
-public record SetupContext(
+public sealed record SetupModel(
   string Database,
   string Schema,
   User OwningUser,

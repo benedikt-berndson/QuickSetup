@@ -1,10 +1,18 @@
-﻿markdown_output = "setup_log.md"
+﻿audit_log_path = "C:/temp/db_setup"
+
+extensions_per_schema= ["btree_gist", "uuid-ossp"]
 
 [connection_strings]
 local = "server=localhost;Port=5432;Database=postgres;User Id=postgres;Password=root4me;Search Path=public;Include Error Detail=true"
 
-[database_schema_definitions]
-dev01 = ["quick_setup", "quick_setup_msg_store"]
+[database_to_schema_map]
+dev01 = "quick_setup"
+
+[create_database_metadata]
+owner = "postgres"
+encoding = "UTF8"
+tablespace = "pg_default"
+connection_limit = -1
 
 [owning_user_template]
 name = "{{SCHEMA}}_machine_user_{{DATABASE}}"

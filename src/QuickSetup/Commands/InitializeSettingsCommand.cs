@@ -13,7 +13,7 @@ namespace QuickSetup.Commands;
 public sealed class InitializeSettingsCommand : ICliRun
 {
   [CliArgument(Description = "Name or path of the output file.")]
-  public string Output { get; set; } = SettingsFactory.DefaultSettingsFile;
+  public string Output { get; set; } = SettingsProvider.DefaultSettingsFile;
 
   [CliOption(Description = "Replace existing file", Alias = "r")]
   public bool Replace { get; set; }
@@ -27,24 +27,34 @@ public sealed class InitializeSettingsCommand : ICliRun
       throw new InvalidOperationException(
         "Command execution failed: Output file already exist and the replace flag is not set");
 
-    var builder = new NpgsqlConnectionStringBuilder();
-    builder.Host = "localhost";
-    builder.Port = 5432;
-    builder.Username = "postgres";
-    builder.Password = "<PASSWORD>";
-    builder.Database = "postgres";
-    builder.SearchPath = "public";
-    builder.IncludeErrorDetail = true;
+    var builder = new NpgsqlConnectionStringBuilder
+    {
+      Host = "localhost",
+      Port = 5432,
+      Username = "postgres",
+      Password = "<PASSWORD>",
+      Database = "postgres",
+      SearchPath = "public",
+      IncludeErrorDetail = true
+    };
 
     var connectionStrings = new Dictionary<string, string>
     {
       ["connection_name"] = builder.ToString()
     };
 
-    var databaseSchemaDefinitions = new Dictionary<string, List<string>>
+    var databaseSchemaDefinitions = new Dictionary<string, string>
     {
-      ["db01"] = ["schema01", "schema02", "schema03"],
-      ["db02"] = ["schema01", "schema02", "schema03"]
+      ["db01"] = "schema01",
+      ["db02"] = "schema01"
+    };
+
+    var createDbMetadata = new CreateDatabaseMetadata
+    {
+      Owner = "postgres",
+      Encoding = "UTF8",
+      Tablespace = "pg_default",
+      ConnectionLimit = -1
     };
 
     var owner = User.From("{{SCHEMA}}_machine_user_{{DATABASE}}", "{{PASSWORD}}");
@@ -54,7 +64,8 @@ public sealed class InitializeSettingsCommand : ICliRun
 
     foreach (var property in (string[])
       [
-        "connection_strings", "database_schema_definitions", "owning_user_template", "read_write_user_templates", "readonly_user_templates"
+        "connection_strings", "database_schema_definitions", "create_database_metadata", "owning_user_template",
+        "read_write_user_templates", "readonly_user_templates"
       ]
     )
     {
@@ -77,9 +88,10 @@ public sealed class InitializeSettingsCommand : ICliRun
 
     var settings = new QuickSetupSettings
     {
-      MarkdownOutput = "setup_log.md",
+      AuditLogPath = "",
       ConnectionStrings = connectionStrings,
-      DatabaseSchemaDefinitions = databaseSchemaDefinitions,
+      CreateDatabaseMetadata = createDbMetadata,
+      DatabaseToSchemaMap = databaseSchemaDefinitions,
       OwningUserTemplate = owner,
       ReadWriteUserTemplates = readWrite,
       ReadonlyUserTemplates = readonlyUser,

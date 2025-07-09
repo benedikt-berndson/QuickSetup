@@ -2,9 +2,9 @@
 
 namespace QuickSetup.Common.Abstractions;
 
-public interface ISettingsFactory
+public interface ISettingsProvider
 {
-  QuickSetupSettings GetInstance();
+  QuickSetupSettings GetSettings();
 
   void Init(string settingsFile);
 }

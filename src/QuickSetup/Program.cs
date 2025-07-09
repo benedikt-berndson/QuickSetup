@@ -2,6 +2,7 @@
 
 using DotMake.CommandLine;
 using Microsoft.Extensions.DependencyInjection;
+using QuickSetup.Commands.Postgres;
 using QuickSetup.Common;
 using QuickSetup.Common.Abstractions;
 using Serilog;
@@ -14,9 +15,8 @@ Log.Logger = new LoggerConfiguration()
 
 Cli.Ext.ConfigureServices(services =>
 {
-  services.AddSingleton<ISettingsFactory, SettingsFactory>();
-  services.AddSingleton<IDbConnectionFactory, DbConnectionFactory>();
-  services.AddSingleton<ITracingService, TracingService>();
+  services.AddSingleton<ISettingsProvider, SettingsProvider>();
+  services.AddSingleton<IPostgresRepository, PostgresRepository>();
 });
 
 try
