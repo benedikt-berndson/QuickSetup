@@ -1,31 +1,23 @@
-﻿using DotMake.CommandLine;
-using Npgsql;
-using QuickSetup.Common;
+﻿using Npgsql;
+using OperationResult;
 using QuickSetup.Models;
+using Spectre.Console;
+using Spectre.Console.Cli;
 using Tomlyn;
 using Tomlyn.Model;
 using Tomlyn.Syntax;
 
-namespace QuickSetup.Commands;
+namespace QuickSetup.Commands.Initialize;
 
-[CliCommand(Description = "Initialize empty settings file", Parent = typeof(RootCommand),
-  Alias = "init")]
-public sealed class InitializeSettingsCommand : ICliRun
+public sealed class InitializeUserSettingsCommand : Command<InitializeUserSettingsCommandSettings>
 {
-  [CliArgument(Description = "Name or path of the output file.")]
-  public string Output { get; set; } = SettingsProvider.DefaultSettingsFile;
-
-  [CliOption(Description = "Replace existing file", Alias = "r")]
-  public bool Replace { get; set; }
-
-  public void Run()
+  public override int Execute(CommandContext context, InitializeUserSettingsCommandSettings commandSettings)
   {
-    if (!Output.EndsWith("toml"))
-      throw new ArgumentException("Command execution failed: Output file must be TOML file");
+    AnsiConsole.MarkupLine("[bold yellow]Initializing user-settings template[/]");
 
-    if (File.Exists(Output) && !Replace)
-      throw new InvalidOperationException(
-        "Command execution failed: Output file already exist and the replace flag is not set");
+    var pathResult = GetFilePath(commandSettings);
+    if (!pathResult.IsSuccess) return 1;
+
 
     var builder = new NpgsqlConnectionStringBuilder
     {
@@ -40,7 +32,7 @@ public sealed class InitializeSettingsCommand : ICliRun
 
     var connectionStrings = new Dictionary<string, string>
     {
-      ["connection_name"] = builder.ToString()
+      ["default"] = builder.ToString()
     };
 
     var databaseSchemaDefinitions = new Dictionary<string, string>
@@ -64,7 +56,7 @@ public sealed class InitializeSettingsCommand : ICliRun
 
     foreach (var property in (string[])
       [
-        "connection_strings", "database_schema_definitions", "create_database_metadata", "owning_user_template",
+        "connection_strings", "database_to_schema_map", "create_database_metadata", "owning_user_template",
         "read_write_user_templates", "readonly_user_templates"
       ]
     )
@@ -86,7 +78,7 @@ public sealed class InitializeSettingsCommand : ICliRun
       });
     }
 
-    var settings = new QuickSetupSettings
+    var settings = new SettingsFileModel
     {
       AuditLogPath = "",
       ConnectionStrings = connectionStrings,
@@ -99,6 +91,44 @@ public sealed class InitializeSettingsCommand : ICliRun
     };
 
     var toml = Toml.FromModel(settings);
-    File.WriteAllText(Path.GetFullPath(Output), toml);
+
+    var textPath = new TextPath(pathResult.Value)
+    {
+      SeparatorStyle = new Style(foreground: Color.Aqua),
+      Justification = Justify.Left,
+    };
+    AnsiConsole.Write(textPath);
+    AnsiConsole.WriteLine();
+    File.WriteAllText(pathResult.Value, toml);
+
+    return 0;
+  }
+
+  private static Result<string> GetFilePath(InitializeUserSettingsCommandSettings s)
+  {
+    if (!s.UserSettingsFilePath.EndsWith("toml"))
+    {
+      AnsiConsole.MarkupLine("[red]User-settings file must be TOML file[/]");
+      return new ArgumentException("User-settings file must be TOML file", nameof(s.UserSettingsFilePath));
+    }
+
+    // Path.Combine actually takes the l
+    var file = Path.IsPathFullyQualified(s.UserSettingsFilePath)
+      ? s.UserSettingsFilePath
+      : Path.Combine(Directory.GetCurrentDirectory(), Path.GetFullPath(s.UserSettingsFilePath));
+
+    if (File.Exists(file) && !s.Replace)
+    {
+      AnsiConsole.MarkupLine("[red]User-settings file already exist and the replace flag is not set[/]");
+      return new InvalidOperationException("User-settings file already exist and the replace flag is not set");
+    }
+    
+    var dir = Path.GetDirectoryName(file);
+    if (!Directory.Exists(dir))
+    {
+      Directory.CreateDirectory(dir!);
+    }
+
+    return file;
   }
 }

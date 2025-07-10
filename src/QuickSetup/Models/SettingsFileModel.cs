@@ -3,7 +3,7 @@ using Tomlyn.Model;
 
 namespace QuickSetup.Models;
 
-public sealed class QuickSetupSettings : ITomlMetadataProvider
+public sealed class SettingsFileModel : ITomlMetadataProvider
 {
   public string AuditLogPath { get; set; } = null!;
   public Dictionary<string, string> ConnectionStrings { get; set; } = null!;

@@ -1,144 +1,146 @@
 ﻿using System.Text;
 using Cottle;
-using DotMake.CommandLine;
 using Npgsql;
 using QuickSetup.Common;
 using QuickSetup.Common.Abstractions;
 using QuickSetup.Models;
-using Serilog;
+using Spectre.Console;
+using Spectre.Console.Cli;
 
 namespace QuickSetup.Commands.Postgres;
 
-[CliCommand(Description = "Setup new databases, users, schemas and default privileges", Parent = typeof(RootCommand))]
-public class PgSetupCommand : AbstractSettingsRequiringCommand, ICliRunWithContext
+// [CliCommand(Description = "Setup new databases, users, schemas and default privileges", Parent = typeof(RootCommand))]
+public sealed class PgSetupCommand : Command<PgSetupCommandSettings>
 {
+  private readonly ISettingsProvider _settingsProvider;
   private readonly IPostgresRepository _postgresRepository;
-  // private readonly PgSetupExecLog _log;
 
-  public PgSetupCommand(ISettingsProvider settingsProvider, IPostgresRepository postgresRepository) :
-    base(settingsProvider)
+  public PgSetupCommand(ISettingsProvider settingsProvider, IPostgresRepository postgresRepository)
   {
+    _settingsProvider = settingsProvider;
     _postgresRepository = postgresRepository;
   }
 
-  [CliArgument(Description = "Define which connection string from settings.toml to use")]
-  public string ConnectionStringName { get; set; } = null!;
-
-  [CliOption(Description = "Drop existing databases")]
-  public bool DropDatabases { get; set; }
-
-  [CliOption(Description = "Drop existing schemas")]
-  public bool DropSchemas { get; set; }
-
-  public void Run(CliContext cliContext)
+  public override int Execute(CommandContext context, PgSetupCommandSettings cs)
   {
-    Log.Information("Running {CommandName}", GetType().Name);
-    cliContext.Output.WriteLine($"Start {nameof(PgSetupCommand)}");
-    Log.Information("Reading settings file: {SettingsFile}", SettingsFile);
-    cliContext.Output.WriteLine($"Reading settings file: {SettingsFile}");
-    SettingsProvider.Init(SettingsFile);
-    var settings = SettingsProvider.GetSettings();
+    AnsiConsole.MarkupLine("[bold]STARTING DATABASE SETUP[/]");
+    AnsiConsole.MarkupLineInterpolated($"Reading settings file: {cs.SettingsFile}");
 
+
+    _settingsProvider.Init(cs.SettingsFile);
+    var settings = _settingsProvider.GetSettings();
+
+    var root = new Tree("\nSTART ITERATION STEP");
     foreach (var ctx in settings.DatabaseToSchemaMap.Select(entry =>
-      GetSetupContext(cliContext, settings, entry.Key, entry.Value)))
+      GetSetupContext(cs, settings, entry.Key, entry.Value)))
     {
       try
       {
-        Log.Information("  Running setup for {Database}.{Schema}", ctx.SetupModel.Database, ctx.SetupModel.Schema);
-        cliContext.Output.WriteLine($"\n  Running setup for {ctx.SetupModel.Database}.{ctx.SetupModel.Schema}");
-        ctx.Log.AddSettingsTable(this, ctx);
+        root.AddNode($"RUNNING SETUP FOR {ctx.SetupModel.Database}.{ctx.SetupModel.Schema}");
+        ctx.Log.AddSettingsTable(ctx);
 
-        cliContext.Output.WriteLine("  Running deletion of database objects");
-        DeleteDatabaseObjects(ctx);
+        var n1 = root.AddNode("Running deletion of database objects");
+        DeleteDatabaseObjects(ctx, n1);
 
-        cliContext.Output.WriteLine("  Running user creation");
-        CreateUsers(ctx);
+        var n2 = root.AddNode("Running user creation");
+        CreateUsers(ctx, n2);
 
-        cliContext.Output.WriteLine("  Running database creation");
-        CreateDatabase(ctx);
+        var n3 = root.AddNode("Running database creation");
+        CreateDatabase(ctx, n3);
 
-        cliContext.Output.WriteLine("  Running schema creation");
-        CreateSchema(ctx);
+        var n4 = root.AddNode("Running schema creation");
+        CreateSchema(ctx, n4);
 
-        cliContext.Output.WriteLine("  Grant usages on schema");
+        root.AddNode("Grant usages on schema");
         GrantUsageOnSchema(ctx);
 
-        cliContext.Output.WriteLine("  Grant default privileges");
-        GrantDefaultPrivileges(ctx);
+        var n6 = root.AddNode("Grant default privileges");
+        GrantDefaultPrivileges(ctx, n6);
 
-        cliContext.Output.WriteLine("  Write audit log");
-        WriteAuditLog(ctx);
+        var n7 = root.AddNode("Write audit log");
+        WriteAuditLog(ctx, n7);
+
+        AnsiConsole.Write(root);
+        root = new Tree("\nSTART ITERATION STEP");
       }
       catch (Exception e)
       {
         ctx.Log.AddException(e);
-        WriteAuditLog(ctx);
-        throw;
+        var n = root.AddNode("[red]Writing partial audit log after error[/]");
+        WriteAuditLog(ctx, n);
+        AnsiConsole.Write(root);
+        AnsiConsole.WriteException(e);
+        return 1;
       }
     }
+
+    return 0;
   }
 
-  private void DeleteDatabaseObjects(DbSetupContext ctx)
+  private void DeleteDatabaseObjects(PgSetupContext ctx, TreeNode n)
   {
-    if (!DropDatabases && !DropSchemas)
+    if (ctx.CommandSettings is
     {
-      ctx.CliContext.Output.WriteLine("    Nothing to do");
+      DropDatabases: false,
+      DropSchemas: false
+    })
+    {
+      n.AddNode("Nothing to do");
       ctx.Log.AddDropDatabaseStatementSkipped();
       return;
     }
 
-    var existingDatabases = _postgresRepository.GetDatabaseNames(ConnectionStringName);
+    var existingDatabases = _postgresRepository.GetDatabaseNames(ctx.CommandSettings.ConnectionStringName);
     var dbExists = existingDatabases.Contains(ctx.SetupModel.Database);
-    if (DropSchemas && dbExists)
+    if (ctx.CommandSettings.DropSchemas && dbExists)
     {
-      ctx.CliContext.Output.WriteLine($"    Dropping schema: {ctx.SetupModel.Schema}");
+      n.AddNode($"Dropping schema: {ctx.SetupModel.Schema}");
       var dropSchemaStatement = $"DROP SCHEMA IF EXISTS {ctx.SetupModel.Schema} CASCADE";
       ctx.Log.AddDropSchemaStatement(dropSchemaStatement);
-      _postgresRepository.ExecuteAsDbScopedAdmin(ConnectionStringName, ctx.SetupModel.Database,
+      _postgresRepository.ExecuteAsDbScopedAdmin(ctx.CommandSettings.ConnectionStringName, ctx.SetupModel.Database,
         dropSchemaStatement);
     }
     else
     {
-      var skipDropSchemaMsg = $"Skipping dropping schema. --drop-schemas={DropSchemas} && dbExists={dbExists}";
-      ctx.CliContext.Output.WriteLine($"    {skipDropSchemaMsg}");
+      var skipDropSchemaMsg =
+        $"Skipping dropping schema. --drop-schemas={ctx.CommandSettings.DropSchemas} && dbExists={dbExists}";
+      n.AddNode(skipDropSchemaMsg);
       ctx.Log.AddDropSchemaStatement(skipDropSchemaMsg);
     }
 
-    if (DropDatabases && dbExists)
+    if (ctx.CommandSettings.DropDatabases && dbExists)
     {
-      ctx.CliContext.Output.WriteLine($"    Dropping database: {ctx.SetupModel.Database}");
+      n.AddNode($"Dropping database: {ctx.SetupModel.Database}");
       var dropDatabaseStatement = $"DROP DATABASE IF EXISTS {ctx.SetupModel.Database}";
       ctx.Log.AddDropDatabaseStatement(dropDatabaseStatement);
-      _postgresRepository.ExecuteAsRootAdmin(ConnectionStringName, dropDatabaseStatement);
+      _postgresRepository.ExecuteAsRootAdmin(ctx.CommandSettings.ConnectionStringName, dropDatabaseStatement);
     }
     else
     {
-      var skipDropDatabaseMsg = $"Skipping dropping database. --drop-databases={DropDatabases} && dbExists={dbExists}";
-      ctx.CliContext.Output.WriteLine($"    {skipDropDatabaseMsg}");
+      var skipDropDatabaseMsg =
+        $"Skipping dropping database. --drop-databases={ctx.CommandSettings.DropDatabases} && dbExists={dbExists}";
+      n.AddNode(skipDropDatabaseMsg);
       ctx.Log.AddDropDatabaseStatement(skipDropDatabaseMsg);
     }
 
     var dropUserStatements = string.Join(";\n", ctx.SetupModel.GetUsers()
       .Select(x => $"DROP USER IF EXISTS {x.Name}"));
-    ctx.CliContext.Output.WriteLine(
-      $"    Dropping users: {string.Join(", ", ctx.SetupModel.GetUsers().Select(x => x.Name))}");
+    n.AddNode($"Dropping users: {string.Join(", ", ctx.SetupModel.GetUsers().Select(x => x.Name))}");
     ctx.Log.AddDropUsersStatement(dropUserStatements);
-    _postgresRepository.ExecuteAsRootAdmin(ConnectionStringName, dropUserStatements);
-    ;
+    _postgresRepository.ExecuteAsRootAdmin(ctx.CommandSettings.ConnectionStringName, dropUserStatements);
   }
 
-  private void CreateUsers(DbSetupContext ctx)
+  private void CreateUsers(PgSetupContext ctx, TreeNode n)
   {
     var createStatements = string.Join(";\n", ctx.SetupModel.GetUsers()
       .Select(x => $"CREATE USER {x.Name} WITH ENCRYPTED PASSWORD '{x.Password}'"));
 
-    ctx.CliContext.Output.WriteLine(
-      $"    Create users: {string.Join(", ", ctx.SetupModel.GetUsers().Select(x => x.Name))}");
+    n.AddNode($"Create users: {string.Join(", ", ctx.SetupModel.GetUsers().Select(x => x.Name))}");
     ctx.Log.AddUserCreationStatements(createStatements);
-    _postgresRepository.ExecuteAsRootAdmin(ConnectionStringName, createStatements);
+    _postgresRepository.ExecuteAsRootAdmin(ctx.CommandSettings.ConnectionStringName, createStatements);
   }
 
-  private static void WriteAuditLog(DbSetupContext ctx)
+  private static void WriteAuditLog(PgSetupContext ctx, TreeNode n)
   {
     var path = Path.Join(Directory.GetCurrentDirectory(), "Commands", "Postgres", "setup_log_template.md");
     var template = File.ReadAllText(path);
@@ -152,66 +154,72 @@ public class PgSetupCommand : AbstractSettingsRequiringCommand, ICliRunWithConte
     var renderContext = Context.CreateBuiltin(ctx.Log.Log);
     var rendered = document.Render(renderContext);
 
+    var auditLogOutputDir = string.IsNullOrEmpty(ctx.SettingsFile.AuditLogPath)
+      ? Path.GetDirectoryName(Path.GetFullPath(ctx.CommandSettings.SettingsFile))
+      : ctx.SettingsFile.AuditLogPath;
+
     var filename =
       $"{DateTimeOffset.Now:yyyy-MM-dd_HH-mm-ss}_audit_log__{ctx.SetupModel.Database}__{ctx.SetupModel.Schema}.md";
-    var outputPath = Path.IsPathFullyQualified(ctx.Settings.AuditLogPath)
-      ? Path.Join(ctx.Settings.AuditLogPath, filename)
-      : Path.Join(Directory.GetCurrentDirectory(), ctx.Settings.AuditLogPath, filename);
+    var file = Path.IsPathFullyQualified(auditLogOutputDir!)
+      ? Path.Join(auditLogOutputDir, filename)
+      : Path.Combine(Directory.GetCurrentDirectory(), Path.GetFullPath(ctx.SettingsFile.AuditLogPath), filename);
 
-    var dir = Path.GetDirectoryName(outputPath);
-    if (!Directory.Exists(outputPath))
+    var dir = Path.GetDirectoryName(file);
+    if (!Directory.Exists(file))
     {
       Directory.CreateDirectory(dir!);
     }
 
-    ctx.CliContext.Output.WriteLine($"    Writing audit log to: {outputPath}");
-    File.WriteAllText(outputPath, rendered);
+    n.AddNode($"Writing audit log to: {file}");
+    File.WriteAllText(file, rendered);
   }
 
-  private void CreateDatabase(DbSetupContext ctx)
+  private void CreateDatabase(PgSetupContext ctx, TreeNode n)
   {
     // CREATE DATABASE
-    var existingDatabases = _postgresRepository.GetDatabaseNames(ConnectionStringName);
+    var existingDatabases = _postgresRepository.GetDatabaseNames(ctx.CommandSettings.ConnectionStringName);
     if (!existingDatabases.Contains(ctx.SetupModel.Database))
     {
       var createDatabaseStatement = $"""
                                      CREATE DATABASE {ctx.SetupModel.Database}
                                      WITH
-                                     OWNER {ctx.Settings.CreateDatabaseMetadata.Owner}
-                                     ENCODING = {ctx.Settings.CreateDatabaseMetadata.Encoding}
-                                     TABLESPACE = {ctx.Settings.CreateDatabaseMetadata.Tablespace}
-                                     CONNECTION LIMIT = {ctx.Settings.CreateDatabaseMetadata.ConnectionLimit};
+                                     OWNER {ctx.SettingsFile.CreateDatabaseMetadata.Owner}
+                                     ENCODING = {ctx.SettingsFile.CreateDatabaseMetadata.Encoding}
+                                     TABLESPACE = {ctx.SettingsFile.CreateDatabaseMetadata.Tablespace}
+                                     CONNECTION LIMIT = {ctx.SettingsFile.CreateDatabaseMetadata.ConnectionLimit};
                                      """;
-      ctx.CliContext.Output.WriteLine($"    Creating database: {ctx.SetupModel.Database}");
+      n.AddNode($"Creating database: {ctx.SetupModel.Database}");
       ctx.Log.AddDatabaseCreationStatement(createDatabaseStatement);
-      _postgresRepository.ExecuteAsRootAdmin(ConnectionStringName, createDatabaseStatement);
+      _postgresRepository.ExecuteAsRootAdmin(ctx.CommandSettings.ConnectionStringName, createDatabaseStatement);
       return;
     }
 
     var msg = $"Database {ctx.SetupModel.Database} already exists - skipping creation";
-    ctx.CliContext.Output.WriteLine($"    {msg}");
+    n.AddNode(msg);
     ctx.Log.AddDatabaseCreationStatement(msg);
   }
 
-  private void CreateSchema(DbSetupContext ctx)
+  private void CreateSchema(PgSetupContext ctx, TreeNode n)
   {
-    var existingSchemas = _postgresRepository.GetSchemaNames(ConnectionStringName, ctx.SetupModel.Database);
+    var existingSchemas =
+      _postgresRepository.GetSchemaNames(ctx.CommandSettings.ConnectionStringName, ctx.SetupModel.Database);
     if (!existingSchemas.Contains(ctx.SetupModel.Schema.ToLower()))
     {
       var createSchemaStatement = $"CREATE SCHEMA {ctx.SetupModel.Schema};";
 
-      ctx.CliContext.Output.WriteLine($"    Creating schema: {ctx.SetupModel.Schema}");
+      n.AddNode($"Creating schema: {ctx.SetupModel.Schema}");
       ctx.Log.AddSchemaCreationStatement(createSchemaStatement);
-      _postgresRepository.ExecuteAsDbScopedAdmin(ConnectionStringName, ctx.SetupModel.Database, createSchemaStatement);
+      _postgresRepository.ExecuteAsDbScopedAdmin(ctx.CommandSettings.ConnectionStringName, ctx.SetupModel.Database,
+        createSchemaStatement);
       return;
     }
 
     var msg = $"Schema {ctx.SetupModel.Schema} already exists - skipping creation";
-    ctx.CliContext.Output.WriteLine($"    {msg}");
+    n.AddNode(msg);
     ctx.Log.AddSchemaCreationStatement(msg);
   }
 
-  private void GrantUsageOnSchema(DbSetupContext ctx)
+  private void GrantUsageOnSchema(PgSetupContext ctx)
   {
     var usages = new StringBuilder();
 
@@ -224,10 +232,11 @@ public class PgSetupCommand : AbstractSettingsRequiringCommand, ICliRunWithConte
     var usagesSql = usages.ToString().TrimEnd();
     ctx.Log.AddGrantUsageStatement(usagesSql);
 
-    _postgresRepository.ExecuteAsDbScopedAdmin(ConnectionStringName, ctx.SetupModel.Database, usagesSql);
+    _postgresRepository.ExecuteAsDbScopedAdmin(ctx.CommandSettings.ConnectionStringName, ctx.SetupModel.Database,
+      usagesSql);
   }
 
-  private void GrantDefaultPrivileges(DbSetupContext ctx)
+  private void GrantDefaultPrivileges(PgSetupContext ctx, TreeNode n)
   {
     var s = new StringBuilder();
     s.AppendLine(
@@ -238,7 +247,7 @@ public class PgSetupCommand : AbstractSettingsRequiringCommand, ICliRunWithConte
       $"ALTER DEFAULT PRIVILEGES IN SCHEMA {ctx.SetupModel.Schema} GRANT ALL ON FUNCTIONS TO {ctx.SetupModel.OwningUser.Name};");
     s.AppendLine();
 
-    ctx.CliContext.Output.WriteLine($"    Granting default privileges to {ctx.SetupModel.OwningUser.Name}");
+    n.AddNode($"Granting default privileges (ALL) to {ctx.SetupModel.OwningUser.Name}");
     foreach (var user in ctx.SetupModel.ReadWriteUsers)
     {
       s.AppendLine(
@@ -248,7 +257,7 @@ public class PgSetupCommand : AbstractSettingsRequiringCommand, ICliRunWithConte
       s.AppendLine(
         $"ALTER DEFAULT PRIVILEGES IN SCHEMA {ctx.SetupModel.Schema} GRANT EXECUTE ON FUNCTIONS TO {user.Name};");
       s.AppendLine();
-      ctx.CliContext.Output.WriteLine($"    Granting default privileges to {user.Name}");
+      n.AddNode($"Granting default privileges (SELECT, INSERT, UPDATE, DELETE) to {user.Name}");
     }
 
     foreach (var user in ctx.SetupModel.ReadonlyUsers)
@@ -256,31 +265,32 @@ public class PgSetupCommand : AbstractSettingsRequiringCommand, ICliRunWithConte
       s.AppendLine(
         $"ALTER DEFAULT PRIVILEGES IN SCHEMA {ctx.SetupModel.Schema} GRANT SELECT ON TABLES TO {user.Name};");
       s.AppendLine();
-      ctx.CliContext.Output.WriteLine($"    Granting default privileges to {user.Name}");
+      n.AddNode($"Granting default privileges (SELECT) to {user.Name}");
     }
 
     var defaultPrivilegesSql = s.ToString().TrimEnd();
     ctx.Log.AddGrantDefaultPrivilegesStatements(defaultPrivilegesSql);
 
-    _postgresRepository.ExecuteAsOwningUser(ConnectionStringName, ctx.SetupModel.Database, ctx.SetupModel.Schema,
-      ctx.SetupModel.OwningUser.Name, ctx.SetupModel.OwningUser.Password, defaultPrivilegesSql);
+    _postgresRepository.ExecuteAsOwningUser(ctx.CommandSettings.ConnectionStringName, ctx.SetupModel.Database,
+      ctx.SetupModel.Schema, ctx.SetupModel.OwningUser.Name, ctx.SetupModel.OwningUser.Password, defaultPrivilegesSql);
   }
 
 
-  private DbSetupContext GetSetupContext(CliContext cliContext, QuickSetupSettings settings, string database,
+  private PgSetupContext GetSetupContext(PgSetupCommandSettings commandSettings, SettingsFileModel settingsFile,
+    string database,
     string schema)
   {
-    var owner = User.From(settings.OwningUserTemplate.Name.ReplaceUserTokens(database, schema),
-      settings.OwningUserTemplate.GeneratePassword
+    var owner = User.From(settingsFile.OwningUserTemplate.Name.ReplaceUserTokens(database, schema),
+      settingsFile.OwningUserTemplate.GeneratePassword
         ? PasswordFactory.GetNew()
-        : settings.OwningUserTemplate.Password);
+        : settingsFile.OwningUserTemplate.Password);
 
-    var readWriteUsers = settings.ReadWriteUserTemplates
+    var readWriteUsers = settingsFile.ReadWriteUserTemplates
       .Select(x => User.From(x.Name.ReplaceUserTokens(database, schema),
         x.GeneratePassword ? PasswordFactory.GetNew() : x.Password))
       .ToList();
 
-    var readOnlyUsers = settings.ReadonlyUserTemplates
+    var readOnlyUsers = settingsFile.ReadonlyUserTemplates
       .Select(x => User.From(x.Name.ReplaceUserTokens(database, schema),
         x.GeneratePassword ? PasswordFactory.GetNew() : x.Password))
       .ToList();
@@ -288,17 +298,18 @@ public class PgSetupCommand : AbstractSettingsRequiringCommand, ICliRunWithConte
     var setupModel = new SetupModel(database, schema, owner, readWriteUsers, readOnlyUsers);
 
     var connectionStrings = setupModel.GetUsers()
-      .Select(u => new NpgsqlConnectionStringBuilder(settings.ConnectionStrings[ConnectionStringName])
-      {
-        Username = u.Name,
-        Password = u.Password,
-        Database = database,
-        SearchPath = schema
-      }.ToString());
+      .Select(u =>
+        new NpgsqlConnectionStringBuilder(settingsFile.ConnectionStrings[commandSettings.ConnectionStringName])
+        {
+          Username = u.Name,
+          Password = u.Password,
+          Database = database,
+          SearchPath = schema
+        }.ToString());
     var connectionStringsText = string.Join("\n", connectionStrings);
-    var auditLog = new PgSetupAuditLog(settings, cliContext);
+    var auditLog = new PgSetupAuditLog();
     auditLog.AddConnectionStrings(connectionStringsText);
 
-    return new DbSetupContext(cliContext, setupModel, settings, auditLog);
+    return new PgSetupContext(setupModel, commandSettings, settingsFile, auditLog);
   }
 }

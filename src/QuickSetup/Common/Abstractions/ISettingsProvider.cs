@@ -4,7 +4,7 @@ namespace QuickSetup.Common.Abstractions;
 
 public interface ISettingsProvider
 {
-  QuickSetupSettings GetSettings();
+  SettingsFileModel GetSettings();
 
   void Init(string settingsFile);
 }

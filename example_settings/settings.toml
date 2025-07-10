@@ -1,4 +1,4 @@
-﻿audit_log_path = "C:/temp/db_setup"
+﻿audit_log_path = ""
 
 extensions_per_schema= ["btree_gist", "uuid-ossp"]
 
@@ -7,6 +7,7 @@ local = "server=localhost;Port=5432;Database=postgres;User Id=postgres;Password=
 
 [database_to_schema_map]
 dev01 = "quick_setup"
+dev02 = "quick_setup"
 
 [create_database_metadata]
 owner = "postgres"

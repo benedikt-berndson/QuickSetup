@@ -1,48 +1,49 @@
 ﻿using ConsoleTables;
 using Cottle;
-using DotMake.CommandLine;
 using QuickSetup.Common;
-using QuickSetup.Models;
 
 namespace QuickSetup.Commands.Postgres;
 
-public sealed class PgSetupAuditLog(QuickSetupSettings settings, CliContext cliContext)
+public sealed class PgSetupAuditLog()
 {
-  private readonly Dictionary<Value, Value> _log = new();
+  public Dictionary<Value, Value> Log { get; } = new();
 
-  public Dictionary<Value, Value> Log => _log;
-
-  public void AddSettingsTable(PgSetupCommand command, DbSetupContext ctx)
+  public void AddSettingsTable(PgSetupContext ctx)
   {
     var st = new ConsoleTable("PROPERTY", "VALUE")
     {
       MaxWidth = 300
     };
-    st.AddRow(nameof(command.ConnectionStringName), command.ConnectionStringName.ToMdCode());
-    st.AddRow(nameof(command.DropDatabases), command.DropDatabases.ToString().ToMdCode());
-    st.AddRow(nameof(command.DropSchemas), command.DropSchemas.ToString().ToMdCode());
+    st.AddRow(nameof(ctx.CommandSettings.ConnectionStringName), ctx.CommandSettings.ConnectionStringName.ToMdCode());
+    st.AddRow(nameof(ctx.CommandSettings.DropDatabases), ctx.CommandSettings.DropDatabases.ToString().ToMdCode());
+    st.AddRow(nameof(ctx.CommandSettings.DropSchemas), ctx.CommandSettings.DropSchemas.ToString().ToMdCode());
     ;
-    var databasesAndSchemas = string.Join(", ", settings.DatabaseToSchemaMap.Select(x => $"{x.Key}:{x.Value}"));
+    var databasesAndSchemas = string.Join(", ", ctx.SettingsFile.DatabaseToSchemaMap.Select(x => $"{x.Key}:{x.Value}"));
     st.AddRow("Databases/Schemas", databasesAndSchemas.ToMdCode());
 
-    st.AddRow($"{nameof(settings.CreateDatabaseMetadata)}.{nameof(settings.CreateDatabaseMetadata.Owner)}",
-      settings.CreateDatabaseMetadata.Owner.ToMdCode());
-    st.AddRow($"{nameof(settings.CreateDatabaseMetadata)}.{nameof(settings.CreateDatabaseMetadata.Encoding)}",
-      settings.CreateDatabaseMetadata.Encoding.ToMdCode());
-    st.AddRow($"{nameof(settings.CreateDatabaseMetadata)}.{nameof(settings.CreateDatabaseMetadata.Tablespace)}",
-      settings.CreateDatabaseMetadata.Tablespace.ToMdCode());
-    st.AddRow($"{nameof(settings.CreateDatabaseMetadata)}.{nameof(settings.CreateDatabaseMetadata.ConnectionLimit)}",
-      settings.CreateDatabaseMetadata.ConnectionLimit.ToString().ToMdCode());
+    st.AddRow(
+      $"{nameof(ctx.SettingsFile.CreateDatabaseMetadata)}.{nameof(ctx.SettingsFile.CreateDatabaseMetadata.Owner)}",
+      ctx.SettingsFile.CreateDatabaseMetadata.Owner.ToMdCode());
+    st.AddRow(
+      $"{nameof(ctx.SettingsFile.CreateDatabaseMetadata)}.{nameof(ctx.SettingsFile.CreateDatabaseMetadata.Encoding)}",
+      ctx.SettingsFile.CreateDatabaseMetadata.Encoding.ToMdCode());
+    st.AddRow(
+      $"{nameof(ctx.SettingsFile.CreateDatabaseMetadata)}.{nameof(ctx.SettingsFile.CreateDatabaseMetadata.Tablespace)}",
+      ctx.SettingsFile.CreateDatabaseMetadata.Tablespace.ToMdCode());
+    st.AddRow(
+      $"{nameof(ctx.SettingsFile.CreateDatabaseMetadata)}.{nameof(ctx.SettingsFile.CreateDatabaseMetadata.ConnectionLimit)}",
+      ctx.SettingsFile.CreateDatabaseMetadata.ConnectionLimit.ToString().ToMdCode());
 
-    st.AddRow(nameof(settings.OwningUserTemplate),
-      $"Name={settings.OwningUserTemplate.Name}, Password={settings.OwningUserTemplate.Password}".ToMdCode());
-    foreach (var u in settings.ReadWriteUserTemplates)
-      st.AddRow(nameof(settings.ReadWriteUserTemplates), $"Name={u.Name}, Password={u.Password}".ToMdCode());
+    st.AddRow(nameof(ctx.SettingsFile.OwningUserTemplate),
+      $"Name={ctx.SettingsFile.OwningUserTemplate.Name}, Password={ctx.SettingsFile.OwningUserTemplate.Password}"
+        .ToMdCode());
+    foreach (var u in ctx.SettingsFile.ReadWriteUserTemplates)
+      st.AddRow(nameof(ctx.SettingsFile.ReadWriteUserTemplates), $"Name={u.Name}, Password={u.Password}".ToMdCode());
 
-    foreach (var u in settings.ReadonlyUserTemplates)
-      st.AddRow(nameof(settings.ReadWriteUserTemplates), $"Name={u.Name}, Password={u.Password}".ToMdCode());
+    foreach (var u in ctx.SettingsFile.ReadonlyUserTemplates)
+      st.AddRow(nameof(ctx.SettingsFile.ReadWriteUserTemplates), $"Name={u.Name}, Password={u.Password}".ToMdCode());
 
-    st.AddRow(nameof(settings.AuditLogPath), settings.AuditLogPath.ToMdCode());
+    st.AddRow(nameof(ctx.SettingsFile.AuditLogPath), ctx.SettingsFile.AuditLogPath.ToMdCode());
 
 
     var ut = new ConsoleTable("USER", "PASSWORD")
@@ -51,45 +52,45 @@ public sealed class PgSetupAuditLog(QuickSetupSettings settings, CliContext cliC
     };
     foreach (var u in ctx.SetupModel.GetUsers())
       ut.AddRow(u.Name, u.Password.ToMdCode());
-    
-    _log.Add("settingsTable", st.ToMarkDownString());
-    _log.Add("usersTable", ut.ToMarkDownString());
-    _log.Add("currentDatabase", ctx.SetupModel.Database);
-    _log.Add("currentSchema", ctx.SetupModel.Schema);
-    _log.Add("dropDatabaseStatementSkipped", false);
-    _log.Add("dbObjectsOwner", ctx.SetupModel.OwningUser.Name);
+
+    Log.Add("settingsTable", st.ToMarkDownString());
+    Log.Add("usersTable", ut.ToMarkDownString());
+    Log.Add("currentDatabase", ctx.SetupModel.Database);
+    Log.Add("currentSchema", ctx.SetupModel.Schema);
+    Log.Add("dropDatabaseStatementSkipped", false);
+    Log.Add("dbObjectsOwner", ctx.SetupModel.OwningUser.Name);
   }
 
   public void AddConnectionStrings(string text)
-    => _log.Add("connectionStrings", text);
-  
+    => Log.Add("connectionStrings", text);
+
   public void AddDropSchemaStatement(string text)
-    => _log.Add("dropSchemaStatement", text);
+    => Log.Add("dropSchemaStatement", text);
 
   public void AddDropDatabaseStatementSkipped()
-    => _log.Add("dropDatabaseStatementSkipped", true);
+    => Log.Add("dropDatabaseStatementSkipped", true);
 
   public void AddDropDatabaseStatement(string text)
-    => _log.Add("dropDatabaseStatement", text);
+    => Log.Add("dropDatabaseStatement", text);
 
   public void AddDropUsersStatement(string text)
-    => _log.Add("dropUserStatement", text);
+    => Log.Add("dropUserStatement", text);
 
   public void AddUserCreationStatements(string text)
-    => _log.Add("userCreationStatements", text);
+    => Log.Add("userCreationStatements", text);
 
   public void AddDatabaseCreationStatement(string text)
-    => _log.Add("databaseCreationStatements", text);
+    => Log.Add("databaseCreationStatements", text);
 
   public void AddSchemaCreationStatement(string text)
-    => _log.Add("schemaCreationStatements", text);
+    => Log.Add("schemaCreationStatements", text);
 
   public void AddGrantUsageStatement(string text)
-    => _log.Add("grantUsageStatements", text);
+    => Log.Add("grantUsageStatements", text);
 
   public void AddGrantDefaultPrivilegesStatements(string text)
-    => _log.Add("grantDefaultPrivilegesStatements", text);
+    => Log.Add("grantDefaultPrivilegesStatements", text);
 
   public void AddException(Exception e)
-    => _log.Add("exception", e.ToString());
+    => Log.Add("exception", e.ToString());
 }

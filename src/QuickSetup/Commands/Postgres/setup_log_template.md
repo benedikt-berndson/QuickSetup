@@ -1,4 +1,6 @@
-# Execution log
+# AUDIT LOG
+
+**Audit log `{currentDatabase}.{currentSchema}`**
 
 ## Used settings
 

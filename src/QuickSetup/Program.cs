@@ -1,29 +1,25 @@
 ﻿// See https://aka.ms/new-console-template for more information
 
-using DotMake.CommandLine;
 using Microsoft.Extensions.DependencyInjection;
+using QuickSetup;
+using QuickSetup.Commands.Initialize;
 using QuickSetup.Commands.Postgres;
 using QuickSetup.Common;
 using QuickSetup.Common.Abstractions;
-using Serilog;
-using RootCommand = QuickSetup.Commands.RootCommand;
+using Spectre.Console.Cli;
 
-Log.Logger = new LoggerConfiguration()
-  .WriteTo.Console()
-  .MinimumLevel.Information()
-  .CreateLogger();
+var serviceCollection = new ServiceCollection();
+serviceCollection.AddSingleton<ISettingsProvider, SettingsProvider>();
+serviceCollection.AddSingleton<IPostgresRepository, PostgresRepository>();
 
-Cli.Ext.ConfigureServices(services =>
+var registrar = new QuickSetupTypeRegistrar(serviceCollection);
+
+var app = new CommandApp(registrar);
+app.Configure(config =>
 {
-  services.AddSingleton<ISettingsProvider, SettingsProvider>();
-  services.AddSingleton<IPostgresRepository, PostgresRepository>();
+  config.AddCommand<PgSetupCommand>("pg-setup")
+    .WithDescription("Setup new databases, users, schemas and default privileges");
+  config.AddCommand<InitializeUserSettingsCommand>("init");
 });
 
-try
-{
-  Cli.Run<RootCommand>(args);
-}
-catch (Exception e)
-{
-  Log.Error( "{Message}", e.Message);
-}
+return app.Run(args);

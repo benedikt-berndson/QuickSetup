@@ -8,14 +8,14 @@ public sealed class SettingsProvider : ISettingsProvider
 {
   public const string DefaultSettingsFile = "settings.toml";
   
-  private QuickSetupSettings? _instance;
+  private SettingsFileModel? _instance;
 
-  public QuickSetupSettings GetSettings()
+  public SettingsFileModel GetSettings()
     => _instance ?? throw new InvalidOperationException("Settings not initialized.");
 
   public void Init(string settingsFile)
   {
     var text = File.ReadAllText(settingsFile);
-    _instance = Toml.ToModel<QuickSetupSettings>(text);
+    _instance = Toml.ToModel<SettingsFileModel>(text);
   }
 }
