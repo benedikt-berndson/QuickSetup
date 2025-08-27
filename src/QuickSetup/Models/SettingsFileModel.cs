@@ -27,12 +27,7 @@ public sealed class User
   public bool GeneratePassword =>
     Password.Equals(SettingsReplacementTokens.Password, StringComparison.InvariantCultureIgnoreCase);
 
-  public static User From(string name, string password)
-    => new()
-    {
-      Name = name,
-      Password = password
-    };
+  public static User From(string name, string password) => new() { Name = name, Password = password };
 }
 
 public sealed class CreateDatabaseMetadata

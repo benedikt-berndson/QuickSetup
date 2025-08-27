@@ -7,11 +7,10 @@ namespace QuickSetup.Common;
 public sealed class SettingsProvider : ISettingsProvider
 {
   public const string DefaultSettingsFile = "settings.toml";
-  
+
   private SettingsFileModel? _instance;
 
-  public SettingsFileModel GetSettings()
-    => _instance ?? throw new InvalidOperationException("Settings not initialized.");
+  public SettingsFileModel GetSettings() => _instance ?? throw new InvalidOperationException("Settings not initialized.");
 
   public void Init(string settingsFile)
   {

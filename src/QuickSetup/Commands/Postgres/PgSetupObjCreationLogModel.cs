@@ -6,7 +6,7 @@ public sealed class PgSetupObjCreationLogModel
   /// Command used to create the database or skip comment
   /// </summary>
   public string? CreateDatabase { get; set; }
-  
+
   /// <summary>
   /// Commands used to create the schemas or skip comment
   /// </summary>

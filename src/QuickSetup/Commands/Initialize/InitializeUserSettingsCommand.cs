@@ -16,8 +16,8 @@ public sealed class InitializeUserSettingsCommand : Command<InitializeUserSettin
     AnsiConsole.MarkupLine("[bold yellow]Initializing user-settings template[/]");
 
     var pathResult = GetFilePath(commandSettings);
-    if (!pathResult.IsSuccess) return 1;
-
+    if (!pathResult.IsSuccess)
+      return 1;
 
     var builder = new NpgsqlConnectionStringBuilder
     {
@@ -27,26 +27,19 @@ public sealed class InitializeUserSettingsCommand : Command<InitializeUserSettin
       Password = "<PASSWORD>",
       Database = "postgres",
       SearchPath = "public",
-      IncludeErrorDetail = true
+      IncludeErrorDetail = true,
     };
 
-    var connectionStrings = new Dictionary<string, string>
-    {
-      ["default"] = builder.ToString()
-    };
+    var connectionStrings = new Dictionary<string, string> { ["default"] = builder.ToString() };
 
-    var databaseSchemaDefinitions = new Dictionary<string, string>
-    {
-      ["db01"] = "schema01",
-      ["db02"] = "schema01"
-    };
+    var databaseSchemaDefinitions = new Dictionary<string, string> { ["db01"] = "schema01", ["db02"] = "schema01" };
 
     var createDbMetadata = new CreateDatabaseMetadata
     {
       Owner = "postgres",
       Encoding = "UTF8",
       Tablespace = "pg_default",
-      ConnectionLimit = -1
+      ConnectionLimit = -1,
     };
 
     var owner = User.From("{{SCHEMA}}_machine_user_{{DATABASE}}", "{{PASSWORD}}");
@@ -54,28 +47,29 @@ public sealed class InitializeUserSettingsCommand : Command<InitializeUserSettin
     List<User> readonlyUser = [User.From("{{SCHEMA}}_readonly_user_{{DATABASE}}", "{{PASSWORD}}")];
     var tomlPropertiesMetadata = new TomlPropertiesMetadata();
 
-    foreach (var property in (string[])
-      [
-        "connection_strings", "database_to_schema_map", "create_database_metadata", "owning_user_template",
-        "read_write_user_templates", "readonly_user_templates"
-      ]
+    foreach (
+      var property in (string[])
+        [
+          "connection_strings",
+          "database_to_schema_map",
+          "create_database_metadata",
+          "owning_user_template",
+          "read_write_user_templates",
+          "readonly_user_templates",
+        ]
     )
     {
-      tomlPropertiesMetadata.SetProperty(property, new TomlPropertyMetadata
-      {
-        LeadingTrivia =
-        [
-          new TomlSyntaxTriviaMetadata
-          {
-            Kind = TokenKind.NewLine,
-            Text = "\r\n"
-          }
-        ],
-        DisplayKind = TomlPropertyDisplayKind.Default,
-        TrailingTrivia = null,
-        TrailingTriviaAfterEndOfLine = null,
-        Span = default
-      });
+      tomlPropertiesMetadata.SetProperty(
+        property,
+        new TomlPropertyMetadata
+        {
+          LeadingTrivia = [new TomlSyntaxTriviaMetadata { Kind = TokenKind.NewLine, Text = "\r\n" }],
+          DisplayKind = TomlPropertyDisplayKind.Default,
+          TrailingTrivia = null,
+          TrailingTriviaAfterEndOfLine = null,
+          Span = default,
+        }
+      );
     }
 
     var settings = new SettingsFileModel
@@ -87,7 +81,7 @@ public sealed class InitializeUserSettingsCommand : Command<InitializeUserSettin
       OwningUserTemplate = owner,
       ReadWriteUserTemplates = readWrite,
       ReadonlyUserTemplates = readonlyUser,
-      PropertiesMetadata = tomlPropertiesMetadata
+      PropertiesMetadata = tomlPropertiesMetadata,
     };
 
     var toml = Toml.FromModel(settings);
@@ -122,7 +116,7 @@ public sealed class InitializeUserSettingsCommand : Command<InitializeUserSettin
       AnsiConsole.MarkupLine("[red]User-settings file already exist and the replace flag is not set[/]");
       return new InvalidOperationException("User-settings file already exist and the replace flag is not set");
     }
-    
+
     var dir = Path.GetDirectoryName(file);
     if (!Directory.Exists(dir))
     {

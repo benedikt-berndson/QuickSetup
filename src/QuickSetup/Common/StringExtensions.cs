@@ -2,6 +2,5 @@
 
 public static class StringExtensions
 {
-  public static string ToMdCode(this string input)
-  => $"`{input}`";
+  public static string ToMdCode(this string input) => $"`{input}`";
 }

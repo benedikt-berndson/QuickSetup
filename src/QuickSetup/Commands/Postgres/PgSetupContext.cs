@@ -6,4 +6,5 @@ public sealed record PgSetupContext(
   SetupModel SetupModel,
   PgSetupCommandSettings CommandSettings,
   SettingsFileModel SettingsFile,
-  PgSetupAuditLog Log);
+  PgSetupAuditLog Log
+);
