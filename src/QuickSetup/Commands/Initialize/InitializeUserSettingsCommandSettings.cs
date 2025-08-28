@@ -7,7 +7,7 @@ namespace QuickSetup.Commands.Initialize;
 public sealed class InitializeUserSettingsCommandSettings : CommandSettings
 {
   [CommandArgument(0, "[user settings file path]")]
-  [DefaultValue(SettingsProvider.DefaultSettingsFile)]
+  [DefaultValue(SettingsProvider.DefaultUserSettingsFile)]
   public string UserSettingsFilePath { get; set; } = null!;
 
   [CommandOption("-r|--replace")]

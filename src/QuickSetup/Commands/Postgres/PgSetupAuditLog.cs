@@ -1,10 +1,11 @@
 ﻿using ConsoleTables;
 using Cottle;
 using QuickSetup.Common;
+using QuickSetup.Models.Input;
 
 namespace QuickSetup.Commands.Postgres;
 
-public sealed class PgSetupAuditLog()
+public sealed class PgSetupAuditLog
 {
   public Dictionary<Value, Value> Log { get; } = new();
 
@@ -14,49 +15,58 @@ public sealed class PgSetupAuditLog()
     st.AddRow(nameof(ctx.CommandSettings.ConnectionStringName), ctx.CommandSettings.ConnectionStringName.ToMdCode());
     st.AddRow(nameof(ctx.CommandSettings.DropDatabases), ctx.CommandSettings.DropDatabases.ToString().ToMdCode());
     st.AddRow(nameof(ctx.CommandSettings.DropSchemas), ctx.CommandSettings.DropSchemas.ToString().ToMdCode());
-    ;
-    var databasesAndSchemas = string.Join(", ", ctx.SettingsFile.DatabaseToSchemaMap.Select(x => $"{x.Key}:{x.Value}"));
+
+    var databasesAndSchemas = string.Join(
+      ", ",
+      ctx.UserSettings.DatabaseSchemaSetupOptions.Select(x => $"{x.Key}:{x.Value}")
+    );
     st.AddRow("Databases/Schemas", databasesAndSchemas.ToMdCode());
 
     st.AddRow(
-      $"{nameof(ctx.SettingsFile.CreateDatabaseMetadata)}.{nameof(ctx.SettingsFile.CreateDatabaseMetadata.Owner)}",
-      ctx.SettingsFile.CreateDatabaseMetadata.Owner.ToMdCode()
+      $"{nameof(DatabaseSetupOptions)}.{nameof(DatabaseSetupOptions.Owner)}",
+      ctx.UserSettings.DatabaseSetupOptions.Owner.ToMdCode()
     );
     st.AddRow(
-      $"{nameof(ctx.SettingsFile.CreateDatabaseMetadata)}.{nameof(ctx.SettingsFile.CreateDatabaseMetadata.Encoding)}",
-      ctx.SettingsFile.CreateDatabaseMetadata.Encoding.ToMdCode()
+      $"{nameof(DatabaseSetupOptions)}.{nameof(DatabaseSetupOptions.Encoding)}",
+      ctx.UserSettings.DatabaseSetupOptions.Encoding.ToMdCode()
     );
     st.AddRow(
-      $"{nameof(ctx.SettingsFile.CreateDatabaseMetadata)}.{nameof(ctx.SettingsFile.CreateDatabaseMetadata.Tablespace)}",
-      ctx.SettingsFile.CreateDatabaseMetadata.Tablespace.ToMdCode()
+      $"{nameof(DatabaseSetupOptions)}.{nameof(DatabaseSetupOptions.Tablespace)}",
+      ctx.UserSettings.DatabaseSetupOptions.Tablespace.ToMdCode()
     );
     st.AddRow(
-      $"{nameof(ctx.SettingsFile.CreateDatabaseMetadata)}.{nameof(ctx.SettingsFile.CreateDatabaseMetadata.ConnectionLimit)}",
-      ctx.SettingsFile.CreateDatabaseMetadata.ConnectionLimit.ToString().ToMdCode()
+      $"{nameof(DatabaseSetupOptions)}.{nameof(DatabaseSetupOptions.ConnectionLimit)}",
+      ctx.UserSettings.DatabaseSetupOptions.ConnectionLimit.ToString().ToMdCode()
     );
 
     st.AddRow(
-      nameof(ctx.SettingsFile.OwningUserTemplate),
-      $"Name={ctx.SettingsFile.OwningUserTemplate.Name}, Password={ctx.SettingsFile.OwningUserTemplate.Password}".ToMdCode()
+      nameof(UserSetupOptions.Owner),
+      $"Name={ctx.UserSettings.UserSetupOptions.Owner.Username}, Password={ctx.UserSettings.UserSetupOptions.Owner.Password}".ToMdCode()
     );
-    foreach (var u in ctx.SettingsFile.ReadWriteUserTemplates)
-      st.AddRow(nameof(ctx.SettingsFile.ReadWriteUserTemplates), $"Name={u.Name}, Password={u.Password}".ToMdCode());
+    foreach (var credentials in ctx.UserSettings.UserSetupOptions.AppUsers)
+      st.AddRow(
+        $"AppUserTemplate: {credentials.Username}",
+        $"Name={credentials.Username}, Password={credentials.Password}".ToMdCode()
+      );
 
-    foreach (var u in ctx.SettingsFile.ReadonlyUserTemplates)
-      st.AddRow(nameof(ctx.SettingsFile.ReadWriteUserTemplates), $"Name={u.Name}, Password={u.Password}".ToMdCode());
+    foreach (var credentials in ctx.UserSettings.UserSetupOptions.ReadOnlyUsers)
+      st.AddRow(
+        $"ReadonlyUserTemplate: {credentials.Username}",
+        $"Name={credentials.Username}, Password={credentials.Password}".ToMdCode()
+      );
 
-    st.AddRow(nameof(ctx.SettingsFile.AuditLogPath), ctx.SettingsFile.AuditLogPath.ToMdCode());
+    st.AddRow("AuditLogOptions.Path", ctx.UserSettings.AuditLogOptions.Path.ToMdCode());
 
     var ut = new ConsoleTable("USER", "PASSWORD") { MaxWidth = 300 };
-    foreach (var u in ctx.SetupModel.GetUsers())
-      ut.AddRow(u.Name, u.Password.ToMdCode());
+    foreach (var credentials in ctx.ProcessingModel.GetUsers())
+      ut.AddRow(credentials.Username, credentials.Password.ToMdCode());
 
     Log.Add("settingsTable", st.ToMarkDownString());
     Log.Add("usersTable", ut.ToMarkDownString());
-    Log.Add("currentDatabase", ctx.SetupModel.Database);
-    Log.Add("currentSchema", ctx.SetupModel.Schema);
+    Log.Add("currentDatabase", ctx.ProcessingModel.DatabaseName);
+    Log.Add("currentSchema", ctx.ProcessingModel.SchemaName);
     // Log.Add("dropDatabaseStatementSkipped", false);
-    Log.Add("dbObjectsOwner", ctx.SetupModel.OwningUser.Name);
+    Log.Add("dbObjectsOwner", ctx.ProcessingModel.Owner.Username);
   }
 
   public void AddConnectionStrings(string text) => Log.Add("connectionStrings", text);

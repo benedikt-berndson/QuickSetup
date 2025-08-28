@@ -1,0 +1,49 @@
+{
+  "AuditLog": {
+    "_": "Enter the desired path for the audit log file. Leave empty to create it in the current working directory.",
+    "Path": ""
+  },
+  "AdminConnectionStrings": {
+    "_": "Add your connection strings here. You can toggle which one is used by the command line argument '-n|--connection-string-name'.",
+    "Default": "server=localhost;Port=5432;Database=postgres;User Id=postgres;Password=root4me;Search Path=public;Include Error Detail=true"
+  },
+  "DatabaseSetup": {
+    "_": "Parameters used to create a missing database",
+    "Owner": "postgres",
+    "Encoding": "UTF8",
+    "Tablespace": "pg_default",
+    "ConnectionLimit": "-1"
+  },
+  "ExtensionsPerSchemaSetup": ["btree_gist", "uuid-ossp"],
+  "DatabaseSchemaSetupCombinations": {
+    "_": "Hashmap containing the key-value pairs of the form 'database-name': 'schema-name'.",
+    "dev01": "quick_setup",
+    "dev02": "quick_setup"
+  },
+  "UserSetupTemplates": {
+    "_": "If you want to use a single app and readonly user for all schemas within the same database, set this to true.",
+    "UseSingleUserForAllSchemasWithinSameDatabase": false,
+    "Owner": {
+      "_": "Provide a template for the user that will be the owner of all created objects",
+      "Username": "{{SCHEMA}}_machine_user_{{DATABASE}}",
+      "__": "Provide a custom password or leave the field empty to generate a random password",
+      "Password": ""
+    },
+    "__": "You can provide multiple AppUser entries. This might be useful if you want to track connections from different machines.",
+    "AppUsers": [
+      {
+        "_": "Provide a template for the user that will have read write permissions on all created objects",
+        "Username": "{{SCHEMA}}_app_user_{{DATABASE}}",
+        "__": "Provide a custom password or leave the field empty to generate a random password",
+        "Password": ""
+      }
+    ],
+    "___": "You can provide multiple ReadOnlyUser entries. This might be useful if you want to track connections from different machines.",
+    "ReadOnlyUser": [{
+      "_": "Provide a template for the user that will, as the name implies, only have read permissions on all created objects",
+      "Username": "{{SCHEMA}}_readonly_user_{{DATABASE}}",
+      "__": "Provide a custom password or leave the field empty to generate a random password",
+      "Password": ""
+    }]
+  }
+}

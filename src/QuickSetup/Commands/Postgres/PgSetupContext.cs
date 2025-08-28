@@ -1,10 +1,11 @@
 ﻿using QuickSetup.Models;
+using QuickSetup.Models.Input;
 
 namespace QuickSetup.Commands.Postgres;
 
 public sealed record PgSetupContext(
-  SetupModel SetupModel,
+  DatabaseSetupProcessingModel ProcessingModel,
   PgSetupCommandSettings CommandSettings,
-  SettingsFileModel SettingsFile,
+  UserSettings UserSettings,
   PgSetupAuditLog Log
 );

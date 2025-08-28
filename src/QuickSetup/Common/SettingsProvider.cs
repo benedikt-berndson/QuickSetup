@@ -1,20 +1,21 @@
-﻿using QuickSetup.Common.Abstractions;
+﻿using System.Text.Json;
+using QuickSetup.Common.Abstractions;
 using QuickSetup.Models;
-using Tomlyn;
+using QuickSetup.Models.Input;
 
 namespace QuickSetup.Common;
 
 public sealed class SettingsProvider : ISettingsProvider
 {
-  public const string DefaultSettingsFile = "settings.toml";
+  public const string DefaultUserSettingsFile = "settings.json";
 
-  private SettingsFileModel? _instance;
+  private UserSettings? _instance;
 
-  public SettingsFileModel GetSettings() => _instance ?? throw new InvalidOperationException("Settings not initialized.");
+  public UserSettings GetUserSettings() => _instance ?? throw new InvalidOperationException("Settings not initialized.");
 
   public void Init(string settingsFile)
   {
     var text = File.ReadAllText(settingsFile);
-    _instance = Toml.ToModel<SettingsFileModel>(text);
+    _instance = JsonSerializer.Deserialize<UserSettings>(text);
   }
 }

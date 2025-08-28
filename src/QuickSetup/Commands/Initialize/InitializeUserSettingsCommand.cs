@@ -1,11 +1,9 @@
-﻿using Npgsql;
+﻿using System.Text.Json;
+using Npgsql;
 using OperationResult;
-using QuickSetup.Models;
+using QuickSetup.Models.Input;
 using Spectre.Console;
 using Spectre.Console.Cli;
-using Tomlyn;
-using Tomlyn.Model;
-using Tomlyn.Syntax;
 
 namespace QuickSetup.Commands.Initialize;
 
@@ -24,86 +22,69 @@ public sealed class InitializeUserSettingsCommand : Command<InitializeUserSettin
       Host = "localhost",
       Port = 5432,
       Username = "postgres",
-      Password = "<PASSWORD>",
+      Password = "P A S S W O R D",
       Database = "postgres",
       SearchPath = "public",
       IncludeErrorDetail = true,
     };
 
-    var connectionStrings = new Dictionary<string, string> { ["default"] = builder.ToString() };
-
-    var databaseSchemaDefinitions = new Dictionary<string, string> { ["db01"] = "schema01", ["db02"] = "schema01" };
-
-    var createDbMetadata = new CreateDatabaseMetadata
-    {
-      Owner = "postgres",
-      Encoding = "UTF8",
-      Tablespace = "pg_default",
-      ConnectionLimit = -1,
-    };
-
-    var owner = User.From("{{SCHEMA}}_machine_user_{{DATABASE}}", "{{PASSWORD}}");
-    List<User> readWrite = [User.From("{{SCHEMA}}_app_user_{{DATABASE}}", "{{PASSWORD}}")];
-    List<User> readonlyUser = [User.From("{{SCHEMA}}_readonly_user_{{DATABASE}}", "{{PASSWORD}}")];
-    var tomlPropertiesMetadata = new TomlPropertiesMetadata();
-
-    foreach (
-      var property in (string[])
+    var inputModel = new UserSettings(
+      new AuditLogOptions(
+        "Enter the desired path for the audit log file. Leave empty to create it in the current working directory.",
+        ""
+      ),
+      new Dictionary<string, string> { ["Default"] = builder.ToString() },
+      new DatabaseSetupOptions("Parameters used to create a missing database", "postgres", "UTF8", "pg_default", -1),
+      ["btree_gist", "uuid-ossp"],
+      new Dictionary<string, string>
+      {
+        ["_"] =
+          "Hashmap containing the key-value pairs of the form 'database-name': 'schema-name'. This comment is removed automatically.",
+        ["db01"] = "schema01",
+        ["db02"] = "schema01",
+      },
+      new UserSetupOptions(
+        "If you want to use a single user for all schemas within the same database, set this to true.",
+        false,
+        new CredentialsOptions(
+          "Provide a template for the user that will be the owner of all created objects.",
+          "{{SCHEMA}}_machine_user_{{DATABASE}}",
+          "Provide a custom password or leave the field empty to generate a random password.",
+          ""
+        ),
+        "You can provide multiple AppUser entries. This might be useful if you want to track connections from different machines.",
         [
-          "connection_strings",
-          "database_to_schema_map",
-          "create_database_metadata",
-          "owning_user_template",
-          "read_write_user_templates",
-          "readonly_user_templates",
+          new CredentialsOptions(
+            "Provide a template for the user that will be the owner of all created objects.",
+            "{{SCHEMA}}_app_user_{{DATABASE}}",
+            "Provide a custom password or leave the field empty to generate a random password.",
+            ""
+          ),
+        ],
+        "You can provide multiple ReadOnlyUser entries. This might be useful if you want to track connections from different machines.",
+        [
+          new CredentialsOptions(
+            "Provide a template for the user that will, as the name implies, only have read permissions on all created objects.",
+            "{{SCHEMA}}_readonly_user_{{DATABASE}}",
+            "Provide a custom password or leave the field empty to generate a random password.",
+            ""
+          ),
         ]
-    )
-    {
-      tomlPropertiesMetadata.SetProperty(
-        property,
-        new TomlPropertyMetadata
-        {
-          LeadingTrivia = [new TomlSyntaxTriviaMetadata { Kind = TokenKind.NewLine, Text = "\r\n" }],
-          DisplayKind = TomlPropertyDisplayKind.Default,
-          TrailingTrivia = null,
-          TrailingTriviaAfterEndOfLine = null,
-          Span = default,
-        }
-      );
-    }
+      )
+    );
 
-    var settings = new SettingsFileModel
-    {
-      AuditLogPath = "",
-      ConnectionStrings = connectionStrings,
-      CreateDatabaseMetadata = createDbMetadata,
-      DatabaseToSchemaMap = databaseSchemaDefinitions,
-      OwningUserTemplate = owner,
-      ReadWriteUserTemplates = readWrite,
-      ReadonlyUserTemplates = readonlyUser,
-      PropertiesMetadata = tomlPropertiesMetadata,
-    };
-
-    var toml = Toml.FromModel(settings);
-
-    var textPath = new TextPath(pathResult.Value)
-    {
-      SeparatorStyle = new Style(foreground: Color.Aqua),
-      Justification = Justify.Left,
-    };
-    AnsiConsole.Write(textPath);
-    AnsiConsole.WriteLine();
-    File.WriteAllText(pathResult.Value, toml);
+    var json = JsonSerializer.Serialize(inputModel, new JsonSerializerOptions { WriteIndented = true });
+    File.WriteAllText(pathResult.Value, json);
 
     return 0;
   }
 
   private static Result<string> GetFilePath(InitializeUserSettingsCommandSettings s)
   {
-    if (!s.UserSettingsFilePath.EndsWith("toml"))
+    if (!s.UserSettingsFilePath.EndsWith("json"))
     {
-      AnsiConsole.MarkupLine("[red]User-settings file must be TOML file[/]");
-      return new ArgumentException("User-settings file must be TOML file", nameof(s.UserSettingsFilePath));
+      AnsiConsole.MarkupLine("[red]User-settings file must be JSON file[/]");
+      return new ArgumentException("User-settings file must be JSON file", nameof(s.UserSettingsFilePath));
     }
 
     // Path.Combine actually takes the l

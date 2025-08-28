@@ -4,19 +4,10 @@ using QuickSetup.Common.Abstractions;
 
 namespace QuickSetup.Commands.Postgres;
 
-public sealed class PostgresRepository : IPostgresRepository
+public sealed class PostgresRepository(ISettingsProvider settingsProvider) : IPostgresRepository
 {
-  private const string Na = "n/a";
-
   // key = (connectionStringName, database, username, password)
-  private readonly Dictionary<(string, string, string, string), NpgsqlDataSource> _dataSources = new();
-  private readonly Dictionary<string, NpgsqlDataSource> _dataSources2 = new();
-  private readonly ISettingsProvider _settingsProvider;
-
-  public PostgresRepository(ISettingsProvider settingsProvider)
-  {
-    _settingsProvider = settingsProvider;
-  }
+  private readonly Dictionary<string, NpgsqlDataSource> _dataSources = new();
 
   public void ExecuteAsRootAdmin(string connectionName, string sql)
   {
@@ -83,8 +74,8 @@ public sealed class PostgresRepository : IPostgresRepository
     string? password = null
   )
   {
-    var settings = _settingsProvider.GetSettings();
-    var b = new NpgsqlConnectionStringBuilder(settings.ConnectionStrings[name]) { Pooling = false };
+    var settings = settingsProvider.GetUserSettings();
+    var b = new NpgsqlConnectionStringBuilder(settings.AdminConnectionStrings[name]) { Pooling = false };
     // Use defaults of admin connection string, unless overwritten
     if (database != null)
       b.Database = database;
@@ -97,11 +88,11 @@ public sealed class PostgresRepository : IPostgresRepository
 
     var connectionString = b.ToString();
 
-    if (_dataSources2.TryGetValue(connectionString, out var dataSource))
+    if (_dataSources.TryGetValue(connectionString, out var dataSource))
       return dataSource.OpenConnection();
 
     dataSource = new NpgsqlDataSourceBuilder(connectionString).Build();
-    _dataSources2.Add(connectionString, dataSource);
+    _dataSources.Add(connectionString, dataSource);
 
     return dataSource.OpenConnection();
   }

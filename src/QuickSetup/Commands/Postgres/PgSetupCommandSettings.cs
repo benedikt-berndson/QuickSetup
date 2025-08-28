@@ -5,10 +5,10 @@ namespace QuickSetup.Commands.Postgres;
 
 public sealed class PgSetupCommandSettings : CommandSettings
 {
-  [Description("Path to settings file, defaults to current directory")]
+  [Description("Path to the JSON settings file, defaults to current directory")]
   [CommandOption("-s|--settings-file")]
-  [DefaultValue(Common.SettingsProvider.DefaultSettingsFile)]
-  public string SettingsFile { get; set; } = null!;
+  [DefaultValue(Common.SettingsProvider.DefaultUserSettingsFile)]
+  public string UserSettingsFile { get; set; } = null!;
 
   [Description("Define which connection string from settings.toml to use")]
   [CommandOption("-n|--connection-string-name")]

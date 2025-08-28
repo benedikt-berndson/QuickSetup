@@ -1,10 +1,11 @@
 ﻿using QuickSetup.Models;
+using QuickSetup.Models.Input;
 
 namespace QuickSetup.Common.Abstractions;
 
 public interface ISettingsProvider
 {
-  SettingsFileModel GetSettings();
+  UserSettings GetUserSettings();
 
   void Init(string settingsFile);
 }
