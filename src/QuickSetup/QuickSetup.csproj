@@ -17,8 +17,8 @@
     <PackageReference Include="Divino.OperationResult" Version="4.0.1" />
   </ItemGroup>
   <ItemGroup>
-    <None Remove="Commands\Postgres\setup_log_template.md" />
-    <Content Include="Commands\Postgres\setup_log_template.md">
+    <None Remove="Commands\Postgres\audit_log_template.md" />
+    <Content Include="Commands\Postgres\audit_log_template.md">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
   </ItemGroup>

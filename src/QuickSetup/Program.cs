@@ -18,7 +18,7 @@ var app = new CommandApp(registrar);
 app.Configure(config =>
 {
   config
-    .AddCommand<PgSetupCommand>("pg-setup")
+    .AddCommand<PgSetupCommand>(PgSetupCommand.CommandName)
     .WithDescription("Setup new databases, users, schemas and default privileges");
   config.AddCommand<InitializeUserSettingsCommand>("init");
 });

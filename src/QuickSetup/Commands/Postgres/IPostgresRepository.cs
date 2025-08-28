@@ -2,19 +2,10 @@
 
 public interface IPostgresRepository
 {
-  void ExecuteAsRootAdmin(string connectionName, string sql);
-  void ExecuteAsDbScopedAdmin(string connectionName, string database, string sql);
-  void ExecuteAsSchemaScopedAdmin(string connectionName, string database, string schema, string sql);
-
-  void ExecuteAsOwningUser(
-    string connectionName,
-    string database,
-    string schema,
-    string username,
-    string password,
-    string sql
-  );
-
-  HashSet<string> GetDatabaseNames(string connectionName);
-  HashSet<string> GetSchemaNames(string connectionName, string database);
+  void ExecuteAsRootAdmin(PgSetupContext ctx, string sql);
+  void ExecuteAsDbScopedAdmin(PgSetupContext ctx, string sql);
+  void ExecuteAsSchemaScopedAdmin(PgSetupContext ctx, string sql);
+  void ExecuteAsOwningUser(PgSetupContext ctx, string sql);
+  HashSet<string> GetDatabaseNames(PgSetupContext ctx);
+  HashSet<string> GetSchemaNames(PgSetupContext ctx);
 }

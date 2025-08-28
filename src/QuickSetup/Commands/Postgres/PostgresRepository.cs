@@ -1,57 +1,54 @@
 ﻿using Dapper;
 using Npgsql;
-using QuickSetup.Common.Abstractions;
 
 namespace QuickSetup.Commands.Postgres;
 
-public sealed class PostgresRepository(ISettingsProvider settingsProvider) : IPostgresRepository
+public sealed class PostgresRepository : IPostgresRepository
 {
   // key = (connectionStringName, database, username, password)
   private readonly Dictionary<string, NpgsqlDataSource> _dataSources = new();
 
-  public void ExecuteAsRootAdmin(string connectionName, string sql)
+  public void ExecuteAsRootAdmin(PgSetupContext ctx, string sql)
   {
-    using var connection = GetConnection(connectionName);
+    using var connection = GetConnection(ctx.AdminConnectionString);
     using var command = new NpgsqlCommand(sql, connection);
     command.ExecuteNonQuery();
   }
 
-  public void ExecuteAsDbScopedAdmin(string connectionName, string database, string sql)
+  public void ExecuteAsDbScopedAdmin(PgSetupContext ctx, string sql)
   {
-    using var connection = GetConnection(connectionName, database);
+    using var connection = GetConnection(ctx.AdminConnectionString, ctx.DatabaseName);
     using var command = new NpgsqlCommand(sql, connection);
     command.ExecuteNonQuery();
   }
 
-  public void ExecuteAsSchemaScopedAdmin(string connectionName, string database, string schema, string sql)
+  public void ExecuteAsSchemaScopedAdmin(PgSetupContext ctx, string sql)
   {
-    using var connection = GetConnection(connectionName, database, schema);
-    ;
+    using var connection = GetConnection(ctx.AdminConnectionString, ctx.DatabaseName, ctx.SchemaName);
     using var command = new NpgsqlCommand(sql, connection);
     command.ExecuteNonQuery();
   }
 
-  public void ExecuteAsOwningUser(
-    string connectionName,
-    string database,
-    string schema,
-    string username,
-    string password,
-    string sql
-  )
+  public void ExecuteAsOwningUser(PgSetupContext ctx, string sql)
   {
-    using var connection = GetConnection(connectionName, database, schema, username, password);
+    using var connection = GetConnection(
+      ctx.AdminConnectionString,
+      ctx.DatabaseName,
+      ctx.SchemaName,
+      ctx.Owner.Username,
+      ctx.Owner.Password
+    );
     using var command = new NpgsqlCommand(sql, connection);
     command.ExecuteNonQuery();
   }
 
-  public HashSet<string> GetDatabaseNames(string connectionName)
+  public HashSet<string> GetDatabaseNames(PgSetupContext ctx)
   {
-    using var adminConnection = GetConnection(connectionName);
+    using var adminConnection = GetConnection(ctx.AdminConnectionString);
     return adminConnection.Query<string>("SELECT datname FROM pg_database").ToHashSet();
   }
 
-  public HashSet<string> GetSchemaNames(string connectionName, string database)
+  public HashSet<string> GetSchemaNames(PgSetupContext ctx)
   {
     const string schemaQuery = """
       SELECT schema_name
@@ -62,20 +59,19 @@ public sealed class PostgresRepository(ISettingsProvider settingsProvider) : IPo
       ORDER BY schema_name;
       """;
 
-    using var connection = GetConnection(connectionName, database);
+    using var connection = GetConnection(ctx.AdminConnectionString, ctx.DatabaseName);
     return connection.Query<string>(schemaQuery).Select(x => x.ToLower()).ToHashSet();
   }
 
   private NpgsqlConnection GetConnection(
-    string name,
+    string adminConnectionString,
     string? database = null,
     string? schema = null,
     string? username = null,
     string? password = null
   )
   {
-    var settings = settingsProvider.GetUserSettings();
-    var b = new NpgsqlConnectionStringBuilder(settings.AdminConnectionStrings[name]) { Pooling = false };
+    var b = new NpgsqlConnectionStringBuilder(adminConnectionString) { Pooling = false };
     // Use defaults of admin connection string, unless overwritten
     if (database != null)
       b.Database = database;
@@ -93,7 +89,6 @@ public sealed class PostgresRepository(ISettingsProvider settingsProvider) : IPo
 
     dataSource = new NpgsqlDataSourceBuilder(connectionString).Build();
     _dataSources.Add(connectionString, dataSource);
-
     return dataSource.OpenConnection();
   }
 }

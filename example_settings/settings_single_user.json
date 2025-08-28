@@ -19,17 +19,17 @@
       "Hashmap containing the key-value pairs of the form database-name: [schema-name1, maybe-schema-name2]. This comment is removed automatically."
     ],
     "db01": [
-      "schema01"
+      "x01", "x02"
     ],
     "db02": [
-      "schema01"
+      "y01", "y02"
     ]
   },
   "userSetupOptions": {
     "singleUserOverride": {
       "_comment": "If you want to use a single user for all schemas within the same database, set this to true. You have to provide a replacement for {{SCHEMA}} token. Set passwords or leave the properties empty to generate random passwords.",
-      "isActive": false,
-      "schemaNameReplacement": "",
+      "isActive": true,
+      "schemaNameReplacement": "replacement",
       "ownerPassword": "",
       "appUsersPassword": "",
       "readOnlyUsersPassword": ""

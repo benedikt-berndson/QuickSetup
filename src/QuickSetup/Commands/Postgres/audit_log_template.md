@@ -2,9 +2,14 @@
 
 **Audit log `{currentDatabase}.{currentSchema}`**
 
-## Used settings
+## Used command
 
-{settingsTable}
+{commandLine}
+
+## Used settings
+```
+{settingsJson}
+```
 
 ## Users
 
@@ -70,6 +75,14 @@ Connect to database '{currentDatabase}' as administrator and issue the following
 
 ```
 {schemaCreationStatements}
+```
+
+### Create extensions
+
+Connect to database '{currentDatabase}.{currentSchema}' as administrator and issue the following commands:
+
+```
+{extensionCreationStatements}
 ```
 
 ### Grant usages

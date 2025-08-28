@@ -2,7 +2,6 @@
 
 public static class SettingsReplacementTokens
 {
-  public const string Password = "{{PASSWORD}}";
   public const string Schema = "{{SCHEMA}}";
   public const string Database = "{{Database}}";
 
