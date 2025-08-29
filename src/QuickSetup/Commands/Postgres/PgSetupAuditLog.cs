@@ -3,7 +3,7 @@ using ConsoleTables;
 using Cottle;
 using Npgsql;
 using QuickSetup.Common;
-using QuickSetup.Models.Input;
+using QuickSetup.Models.UserSettings;
 using Spectre.Console;
 
 namespace QuickSetup.Commands.Postgres;
@@ -55,7 +55,7 @@ public sealed class PgSetupAuditLog
     var commandline =
       $"QuickSetup {PgSetupCommand.CommandName} -n {commandSettings.ConnectionStringName} {dropDatabases} {dropSchemas} -s {commandSettings.UserSettingsFile}";
 
-    _log.Add("commandLine", commandline);
+    _log.Add("commandLine", commandline.ToMdCode());
   }
 
   private void AddSettings(UserSettings userSettings)
@@ -96,12 +96,6 @@ public sealed class PgSetupAuditLog
     _log.Add("dbObjectsOwner", ctx.Owner.Username);
   }
 
-  public void AddDropSchemaStatement(string text) => _log.Add("dropSchemaStatement", text);
-
-  public void AddDropDatabaseStatementSkipped() => _log.Add("dropDatabaseStatementSkipped", true);
-
-  public void AddDropDatabaseStatement(string text) => _log.Add("dropDatabaseStatement", text);
-
   public void AddDropUsersStatement(string text) => _log.Add("dropUserStatement", text);
 
   public void AddUserCreationStatements(string text) => _log.Add("userCreationStatements", text);
@@ -118,9 +112,9 @@ public sealed class PgSetupAuditLog
 
   public void AddException(Exception e) => _log.Add("exception", e.ToString());
 
-  public void WriteFile(TreeNode n, bool setupFailed = false)
+  public void WriteFile(bool setupFailed = false)
   {
-    var path = Path.Join(Directory.GetCurrentDirectory(), "Commands", "Postgres", "audit_log_template.md");
+    var path = Path.Join(AppDomain.CurrentDomain.BaseDirectory, "Commands", "Postgres", "audit_log_template.md");
     var template = File.ReadAllText(path);
     var config = new DocumentConfiguration { NoOptimize = true, Trimmer = DocumentConfiguration.TrimNothing };
     var document = Document.CreateDefault(template, config).DocumentOrThrow;
@@ -129,7 +123,7 @@ public sealed class PgSetupAuditLog
     var rendered = document.Render(renderContext);
 
     var error = setupFailed ? "ERROR_" : "";
-    var filename = $"{error}{DateTimeOffset.Now:yyyy-MM-dd_HH-mm-ss}_audit_log__{_databaseName}__{_schemaName}.md";
+    var filename = $"{error}{DateTimeOffset.Now:yyyyMMddTHHmmss}_audit_log__{_databaseName}__{_schemaName}.md";
     var file = Path.Join(_outputDir, filename);
 
     var dir = Path.GetDirectoryName(file);
@@ -138,7 +132,9 @@ public sealed class PgSetupAuditLog
       Directory.CreateDirectory(dir!);
     }
 
-    n.AddNode($"Writing audit log to: {file}");
+    AnsiConsole.WriteLine();
+    AnsiConsole.MarkupLineInterpolated($"[bold]Writing audit log to: {file}[/]");
     File.WriteAllText(file, rendered);
+    AnsiConsole.WriteLine();
   }
 }

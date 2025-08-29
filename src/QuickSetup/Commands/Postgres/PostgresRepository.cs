@@ -15,9 +15,23 @@ public sealed class PostgresRepository : IPostgresRepository
     command.ExecuteNonQuery();
   }
 
+  public void ExecuteAsRootAdmin(string adminConnectionString, string sql)
+  {
+    using var connection = GetConnection(adminConnectionString);
+    using var command = new NpgsqlCommand(sql, connection);
+    command.ExecuteNonQuery();
+  }
+
   public void ExecuteAsDbScopedAdmin(PgSetupContext ctx, string sql)
   {
     using var connection = GetConnection(ctx.AdminConnectionString, ctx.DatabaseName);
+    using var command = new NpgsqlCommand(sql, connection);
+    command.ExecuteNonQuery();
+  }
+
+  public void ExecuteAsDbScopedAdmin(string adminConnectionString, string databaseName, string sql)
+  {
+    using var connection = GetConnection(adminConnectionString, databaseName);
     using var command = new NpgsqlCommand(sql, connection);
     command.ExecuteNonQuery();
   }
@@ -42,9 +56,9 @@ public sealed class PostgresRepository : IPostgresRepository
     command.ExecuteNonQuery();
   }
 
-  public HashSet<string> GetDatabaseNames(PgSetupContext ctx)
+  public HashSet<string> GetDatabaseNames(string adminConnectionString)
   {
-    using var adminConnection = GetConnection(ctx.AdminConnectionString);
+    using var adminConnection = GetConnection(adminConnectionString);
     return adminConnection.Query<string>("SELECT datname FROM pg_database").ToHashSet();
   }
 
@@ -56,11 +70,17 @@ public sealed class PostgresRepository : IPostgresRepository
       WHERE schema_name NOT IN ('information_schema', 'pg_catalog', 'pg_toast')
         AND schema_name NOT LIKE 'pg_temp_%'
         AND schema_name NOT LIKE 'pg_toast_temp_%'
-      ORDER BY schema_name;
+      ORDER BY schema_name
       """;
 
     using var connection = GetConnection(ctx.AdminConnectionString, ctx.DatabaseName);
     return connection.Query<string>(schemaQuery).Select(x => x.ToLower()).ToHashSet();
+  }
+
+  public HashSet<string> GetAllUsers(string adminConnectionString)
+  {
+    using var connection = GetConnection(adminConnectionString);
+    return connection.Query<string>("select u.usename from pg_catalog.pg_user u").Select(x => x.ToLower()).ToHashSet();
   }
 
   private NpgsqlConnection GetConnection(

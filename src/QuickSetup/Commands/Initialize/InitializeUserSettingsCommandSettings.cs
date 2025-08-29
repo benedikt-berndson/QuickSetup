@@ -12,4 +12,7 @@ public sealed class InitializeUserSettingsCommandSettings : CommandSettings
 
   [CommandOption("-r|--replace")]
   public bool Replace { get; set; }
+
+  [CommandOption("--no-comments")]
+  public bool NoComments { get; set; }
 }

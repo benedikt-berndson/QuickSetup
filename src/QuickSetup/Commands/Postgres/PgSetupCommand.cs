@@ -2,8 +2,8 @@
 using QuickSetup.Common;
 using QuickSetup.Common.Abstractions;
 using QuickSetup.Models;
-using QuickSetup.Models.Input;
 using QuickSetup.Models.Processing;
+using QuickSetup.Models.UserSettings;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
@@ -22,7 +22,9 @@ public sealed class PgSetupCommand(ISettingsProvider settingsProvider, IPostgres
 
     var userSettings = settingsProvider.GetUserSettings(commandSettings.UserSettingsFile);
 
-    // TODO: Deleting database objects must be a one time operation and currently breaks the single-user setup because the second context tries to delete the user. Exclude from audit log.
+    DropDatabaseObjects(commandSettings, userSettings);
+    var handleUsers = HandleUsers(commandSettings, userSettings);
+
     var root = new Tree("\nSTART ITERATION STEP");
     foreach (var ctx in GetSetupContexts(commandSettings, userSettings))
     {
@@ -31,11 +33,8 @@ public sealed class PgSetupCommand(ISettingsProvider settingsProvider, IPostgres
         root.AddNode($"RUNNING SETUP FOR {ctx.DatabaseName}.{ctx.SchemaName}");
         ctx.Log.AddBasicInfo(ctx);
 
-        var n1 = root.AddNode("Running deletion of database objects");
-        DeleteDatabaseObjects(ctx, n1);
-
         var n2 = root.AddNode("Running user creation");
-        CreateUsers(ctx, n2);
+        handleUsers(ctx, n2);
 
         var n3 = root.AddNode("Running database creation");
         CreateDatabase(ctx, n3);
@@ -52,17 +51,15 @@ public sealed class PgSetupCommand(ISettingsProvider settingsProvider, IPostgres
         var n6 = root.AddNode("Grant default privileges");
         GrantDefaultPrivileges(ctx, n6);
 
-        var n7 = root.AddNode("Write audit log");
-        ctx.Log.WriteFile(n7);
-
         AnsiConsole.Write(root);
+        ctx.Log.WriteFile();
+
         root = new Tree("\nSTART ITERATION STEP");
       }
       catch (Exception e)
       {
         ctx.Log.AddException(e);
-        var n = root.AddNode("[red]Writing partial audit log after error[/]");
-        ctx.Log.WriteFile(n, true);
+        ctx.Log.WriteFile(true);
 
         AnsiConsole.Write(root);
         AnsiConsole.WriteException(e);
@@ -73,86 +70,112 @@ public sealed class PgSetupCommand(ISettingsProvider settingsProvider, IPostgres
     return 0;
   }
 
-  private void DeleteDatabaseObjects(PgSetupContext ctx, TreeNode n)
+  private void DropDatabaseObjects(PgSetupCommandSettings commandSettings, UserSettings ctx)
   {
-    if (ctx is { DropDatabases: false, DropSchemas: false })
+    if (commandSettings is { DropDatabases: false, DropSchemas: false })
     {
-      n.AddNode("Nothing to do");
-      ctx.Log.AddDropDatabaseStatementSkipped();
+      AnsiConsole.MarkupLine(
+        "[bold]Skipping dropping database and schema. Both --drop-databases and --drop-schemas are false.[/]"
+      );
       return;
     }
 
-    var existingDatabases = postgresRepository.GetDatabaseNames(ctx);
-    var dbExists = existingDatabases.Contains(ctx.DatabaseName);
-    if (ctx.DropSchemas && dbExists)
-    {
-      n.AddNode($"Dropping schema: {ctx.SchemaName}");
-      var dropSchemaStatement = $"DROP SCHEMA IF EXISTS {ctx.SchemaName} CASCADE";
-      ctx.Log.AddDropSchemaStatement(dropSchemaStatement);
-      postgresRepository.ExecuteAsDbScopedAdmin(ctx, dropSchemaStatement);
-    }
-    else
-    {
-      var skipDropSchemaMsg = $"Skipping dropping schema. --drop-schemas={ctx.DropSchemas} && dbExists={dbExists}";
-      n.AddNode(skipDropSchemaMsg);
-      ctx.Log.AddDropSchemaStatement(skipDropSchemaMsg);
-    }
+    var adminConnectionString = ctx.AdminConnectionStrings[commandSettings.ConnectionStringName];
+    var existingDatabases = postgresRepository.GetDatabaseNames(adminConnectionString);
 
-    if (ctx.DropDatabases && dbExists)
+    foreach (var (databaseName, schemaNames) in ctx.DatabaseSchemaSetupOptions)
     {
-      n.AddNode($"Dropping database: {ctx.DatabaseName}");
-      var dropDatabaseStatement = $"DROP DATABASE IF EXISTS {ctx.DatabaseName}";
-      ctx.Log.AddDropDatabaseStatement(dropDatabaseStatement);
-      postgresRepository.ExecuteAsRootAdmin(ctx, dropDatabaseStatement);
-    }
-    else
-    {
-      var skipDropDatabaseMsg = $"Skipping dropping database. --drop-databases={ctx.DropDatabases} && dbExists={dbExists}";
-      n.AddNode(skipDropDatabaseMsg);
-      ctx.Log.AddDropDatabaseStatement(skipDropDatabaseMsg);
-    }
+      var dbExists = existingDatabases.Contains(databaseName);
+      if (commandSettings.DropSchemas)
+      {
+        foreach (var schemaName in schemaNames)
+        {
+          if (!dbExists)
+            continue;
 
-    var dropUserStatements = string.Join(";\n", ctx.GetAllUsers().Select(x => $"DROP USER IF EXISTS {x.Username}"));
-    n.AddNode($"Dropping users: {string.Join(", ", ctx.GetAllUsers().Select(x => x.Username))}");
-    ctx.Log.AddDropUsersStatement(dropUserStatements);
-    postgresRepository.ExecuteAsRootAdmin(ctx, dropUserStatements);
+          AnsiConsole.MarkupLineInterpolated($"Dropping schema: {databaseName}/{schemaName}");
+          var dropSchemaStatement = $"DROP SCHEMA IF EXISTS {schemaName} CASCADE";
+          postgresRepository.ExecuteAsDbScopedAdmin(adminConnectionString, databaseName, dropSchemaStatement);
+        }
+      }
+
+      if (commandSettings.DropDatabases && dbExists)
+      {
+        AnsiConsole.MarkupLineInterpolated($"Dropping database: {databaseName}");
+        var dropDatabaseStatement = $"DROP DATABASE IF EXISTS {databaseName}";
+        postgresRepository.ExecuteAsRootAdmin(adminConnectionString, dropDatabaseStatement);
+      }
+    }
   }
 
-  private void CreateUsers(PgSetupContext ctx, TreeNode n)
+  /// <summary>
+  /// Create an Action to update users because we need to cache already dropped users for the "single-user for all schemas within one database" feature.
+  /// Otherwise, we would drop the same user multiple times, which also fails because objects depend on this user.
+  /// </summary>
+  /// <returns></returns>
+  private Action<PgSetupContext, TreeNode> HandleUsers(PgSetupCommandSettings commandSettings, UserSettings userSettings)
   {
-    var createStatements = string.Join(
-      ";\n",
-      ctx.GetAllUsers().Select(x => $"CREATE USER {x.Username} WITH ENCRYPTED PASSWORD '{x.Password}'")
-    );
+    var processedUserCredentials = new HashSet<CredentialsModel>();
+    var allUsers = postgresRepository.GetAllUsers(userSettings.AdminConnectionStrings[commandSettings.ConnectionStringName]);
 
-    n.AddNode($"Create users: {string.Join(", ", ctx.GetAllUsers().Select(x => x.Username))}");
-    ctx.Log.AddUserCreationStatements(createStatements);
-    postgresRepository.ExecuteAsRootAdmin(ctx, createStatements);
+    return (ctx, n) =>
+    {
+      var relevantCredentialModels = ctx.GetAllUsers().Where(x => !processedUserCredentials.Contains(x)).ToArray();
+
+      // Executing 'illegal' statements without a username will fail.
+      if (relevantCredentialModels.Length == 0)
+        return;
+
+      // DROP
+      var droppableUsernames = relevantCredentialModels
+        .Where(x => allUsers.Contains(x.Username))
+        .Select(x => x.Username)
+        .ToArray();
+      if (droppableUsernames.Length != 0)
+      {
+        var dropUserStatements = string.Join(";\n", droppableUsernames.Select(uname => $"DROP USER IF EXISTS {uname}"));
+        n.AddNode($"Dropping users: {string.Join(", ", droppableUsernames)}");
+        ctx.Log.AddDropUsersStatement(dropUserStatements);
+        postgresRepository.ExecuteAsRootAdmin(ctx, dropUserStatements);
+      }
+      processedUserCredentials.UnionWith(relevantCredentialModels);
+
+      // CREATE
+      var createStatements = string.Join(
+        ";\n",
+        relevantCredentialModels.Select(x => $"CREATE USER {x.Username} WITH ENCRYPTED PASSWORD '{x.Password}'")
+      );
+
+      n.AddNode($"Create users: {string.Join(", ", relevantCredentialModels.Select(x => x.Username))}");
+      ctx.Log.AddUserCreationStatements(createStatements);
+      postgresRepository.ExecuteAsRootAdmin(ctx, createStatements);
+    };
   }
 
   private void CreateDatabase(PgSetupContext ctx, TreeNode n)
   {
     // CREATE DATABASE
-    var existingDatabases = postgresRepository.GetDatabaseNames(ctx);
-    if (!existingDatabases.Contains(ctx.DatabaseName))
+    var existingDatabases = postgresRepository.GetDatabaseNames(ctx.AdminConnectionString);
+    if (existingDatabases.Contains(ctx.DatabaseName))
     {
-      var createDatabaseStatement = $"""
-        CREATE DATABASE {ctx.DatabaseName}
-        WITH
-        OWNER {ctx.DatabaseSetupModel.Owner}
-        ENCODING = {ctx.DatabaseSetupModel.Encoding}
-        TABLESPACE = {ctx.DatabaseSetupModel.Tablespace}
-        CONNECTION LIMIT = {ctx.DatabaseSetupModel.ConnectionLimit};
-        """;
-      n.AddNode($"Creating database: {ctx.DatabaseName}");
-      ctx.Log.AddDatabaseCreationStatement(createDatabaseStatement);
-      postgresRepository.ExecuteAsRootAdmin(ctx, createDatabaseStatement);
+      var msg = $"Skip creating database {ctx.DatabaseName} - database already exists.";
+      n.AddNode(msg);
+      ctx.Log.AddDatabaseCreationStatement(msg);
+
       return;
     }
 
-    var msg = $"Database {ctx.DatabaseName} already exists - skipping creation";
-    n.AddNode(msg);
-    ctx.Log.AddDatabaseCreationStatement(msg);
+    var createDatabaseStatement = $"""
+      CREATE DATABASE {ctx.DatabaseName}
+      WITH
+      OWNER {ctx.DatabaseSetupModel.Owner}
+      ENCODING = {ctx.DatabaseSetupModel.Encoding}
+      TABLESPACE = {ctx.DatabaseSetupModel.Tablespace}
+      CONNECTION LIMIT = {ctx.DatabaseSetupModel.ConnectionLimit};
+      """;
+    n.AddNode($"Creating database: {ctx.DatabaseName}");
+    ctx.Log.AddDatabaseCreationStatement(createDatabaseStatement);
+    postgresRepository.ExecuteAsRootAdmin(ctx, createDatabaseStatement);
   }
 
   private void CreateSchema(PgSetupContext ctx, TreeNode n)

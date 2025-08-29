@@ -1,7 +1,6 @@
 ﻿using System.Text.Json;
 using QuickSetup.Common.Abstractions;
-using QuickSetup.Models;
-using QuickSetup.Models.Input;
+using QuickSetup.Models.UserSettings;
 
 namespace QuickSetup.Common;
 
@@ -18,30 +17,7 @@ public sealed class SettingsProvider : ISettingsProvider
     var text = File.ReadAllText(path);
     var userSettings =
       JsonSerializer.Deserialize<UserSettings>(text) ?? throw new InvalidOperationException("Settings not initialized.");
-    userSettings.DatabaseSchemaSetupOptions.Remove("_");
-    var clone = userSettings with
-    {
-      UserSetupOptions = new UserSetupOptions(
-        SingleUserOverride: userSettings.UserSetupOptions.SingleUserOverride with
-        {
-          Comment = null,
-        },
-        CommentAppUsers: null,
-        CommentReadOnlyUsers: null,
-        Owner: userSettings.UserSetupOptions.Owner with
-        {
-          CommentUsername = null,
-          CommentPassword = null,
-        },
-        AppUsers: userSettings
-          .UserSetupOptions.AppUsers.Select(x => x with { CommentUsername = null, CommentPassword = null })
-          .ToArray(),
-        ReadOnlyUsers: userSettings
-          .UserSetupOptions.ReadOnlyUsers.Select(x => x with { CommentUsername = null, CommentPassword = null })
-          .ToArray()
-      ),
-    };
 
-    return clone;
+    return userSettings.WithoutComments();
   }
 }

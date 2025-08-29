@@ -1,5 +1,4 @@
 ﻿using QuickSetup.Models;
-using QuickSetup.Models.Input;
 using QuickSetup.Models.Processing;
 
 namespace QuickSetup.Commands.Postgres;

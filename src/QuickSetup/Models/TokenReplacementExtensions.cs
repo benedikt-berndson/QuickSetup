@@ -1,6 +1,6 @@
 ﻿namespace QuickSetup.Models;
 
-public static class SettingsReplacementTokens
+public static class TokenReplacementExtensions
 {
   public const string Schema = "{{SCHEMA}}";
   public const string Database = "{{Database}}";

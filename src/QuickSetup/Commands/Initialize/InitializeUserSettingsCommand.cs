@@ -1,7 +1,8 @@
 ﻿using System.Text.Json;
+using System.Text.Json.Serialization;
 using Npgsql;
 using OperationResult;
-using QuickSetup.Models.Input;
+using QuickSetup.Models.UserSettings;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
@@ -11,7 +12,7 @@ public sealed class InitializeUserSettingsCommand : Command<InitializeUserSettin
 {
   public override int Execute(CommandContext context, InitializeUserSettingsCommandSettings commandSettings)
   {
-    AnsiConsole.MarkupLine("[bold yellow]Initializing user-settings template[/]");
+    AnsiConsole.MarkupLine("[bold]Initializing user-settings template[/]");
 
     var pathResult = GetFilePath(commandSettings);
     if (!pathResult.IsSuccess)
@@ -28,7 +29,7 @@ public sealed class InitializeUserSettingsCommand : Command<InitializeUserSettin
       IncludeErrorDetail = true,
     };
 
-    var inputModel = new UserSettings(
+    var userSettings = new UserSettings(
       "",
       new Dictionary<string, string> { ["default"] = builder.ToString() },
       new DatabaseSetupOptions("postgres", "UTF8", "pg_default", -1),
@@ -78,8 +79,12 @@ public sealed class InitializeUserSettingsCommand : Command<InitializeUserSettin
       )
     );
 
-    var json = JsonSerializer.Serialize(inputModel, new JsonSerializerOptions { WriteIndented = true });
+    var json = JsonSerializer.Serialize(
+      commandSettings.NoComments ? userSettings.WithoutComments() : userSettings,
+      new JsonSerializerOptions { WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull }
+    );
     File.WriteAllText(pathResult.Value, json);
+    AnsiConsole.MarkupLine($"[green]User-settings file written to: {pathResult.Value}[/]");
 
     return 0;
   }
@@ -88,8 +93,9 @@ public sealed class InitializeUserSettingsCommand : Command<InitializeUserSettin
   {
     if (!s.UserSettingsFilePath.EndsWith("json"))
     {
-      AnsiConsole.MarkupLine("[red]User-settings file must be JSON file[/]");
-      return new ArgumentException("User-settings file must be JSON file", nameof(s.UserSettingsFilePath));
+      const string notJson = "User-settings file must be JSON file";
+      AnsiConsole.MarkupLineInterpolated($"[red]{notJson}t[/]");
+      return new ArgumentException(notJson, nameof(s.UserSettingsFilePath));
     }
 
     // Path.Combine actually takes the l
@@ -99,8 +105,9 @@ public sealed class InitializeUserSettingsCommand : Command<InitializeUserSettin
 
     if (File.Exists(file) && !s.Replace)
     {
-      AnsiConsole.MarkupLine("[red]User-settings file already exist and the replace flag is not set[/]");
-      return new InvalidOperationException("User-settings file already exist and the replace flag is not set");
+      var msg = $"The file {file} already exist and the replace flag is not set";
+      AnsiConsole.MarkupLineInterpolated($"[red]{msg}[/]");
+      return new InvalidOperationException(msg);
     }
 
     var dir = Path.GetDirectoryName(file);

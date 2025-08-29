@@ -1,4 +1,4 @@
-﻿using QuickSetup.Models.Input;
+﻿using QuickSetup.Models.UserSettings;
 
 namespace QuickSetup.Common.Abstractions;
 
